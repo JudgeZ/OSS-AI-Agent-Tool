@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "security:enabled"
+  ],
+  "dependencyDashboard": true,
+  "timezone": "UTC",
+  "schedule": [
+    "after 3am and before 6am on monday"
+  ],
+  "semanticCommits": "enabled",
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "auto",
+  "packageRules": [
+    {
+      "matchManagers": ["npm"],
+      "groupName": "npm minor/patch",
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "groupName": "Docker base images",
+      "separateMultipleMajor": true
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "separateMinorPatch": true
+    },
+    {
+      "matchManagers": ["helm-values"],
+      "groupName": "Helm image tags",
+      "separateMinorPatch": true
+    }
+  ]
+}

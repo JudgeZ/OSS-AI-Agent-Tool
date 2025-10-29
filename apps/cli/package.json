@@ -1,0 +1,14 @@
+{
+  "name": "oss-ai-agent-tool-cli",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "aidt": "dist/index.js"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

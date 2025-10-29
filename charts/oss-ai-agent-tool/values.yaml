@@ -1,0 +1,38 @@
+image:
+  repo: ghcr.io/yourorg/oss-ai-agent-tool
+  tag: "0.1.0"
+
+runMode: consumer            # or enterprise
+
+messaging:
+  type: rabbitmq             # or kafka
+
+gatewayApi:
+  replicas: 2
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits:   { cpu: "500m", memory: "256Mi" }
+
+orchestrator:
+  replicas: 2
+  env:
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "false"
+  hpa:
+    min: 2
+    max: 10
+    targetQueueDepth: 5
+
+redis:
+  enabled: true
+postgres:
+  enabled: true
+rabbitmq:
+  enabled: true
+kafka:
+  enabled: false
+
+jaeger:
+  enabled: true
+langfuse:
+  enabled: true
