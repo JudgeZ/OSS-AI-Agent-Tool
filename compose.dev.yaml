@@ -7,8 +7,6 @@ services:
     command: ["tail", "-f", "/dev/null"]
     volumes:
       - ./:/workspace:delegated
-    ports:
-      - "3000:3000"
 
   gateway:
     image: golang:1.22-alpine
@@ -16,5 +14,3 @@ services:
     command: ["tail", "-f", "/dev/null"]
     volumes:
       - ./:/workspace:delegated
-    ports:
-      - "8080:8080"
