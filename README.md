@@ -23,6 +23,7 @@ go run ./apps/gateway-api
 ## Agent profiles
 Create per-agent guides under `agents/<name>/agent.md` or via CLI:
 ```bash
+npm install --workspace apps/cli
 npm --workspace apps/cli run build
 ./node_modules/.bin/aidt new-agent planner
 ```
