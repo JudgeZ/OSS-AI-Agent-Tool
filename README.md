@@ -1,8 +1,8 @@
 # OSS AI Agent Tool
 
-[![CI](https://github.com/${{ github.repository }}/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
-[![Release Images](https://github.com/${{ github.repository }}/actions/workflows/release-images.yml/badge.svg)](../../actions/workflows/release-images.yml)
-[![Release Helm Chart](https://github.com/${{ github.repository }}/actions/workflows/release-charts.yml/badge.svg)](../../actions/workflows/release-charts.yml)
+[![CI](https://github.com/JudgeZ/OSS-AI-Agent-Tool/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![Release Images](https://github.com/JudgeZ/OSS-AI-Agent-Tool/actions/workflows/release-images.yml/badge.svg)](../../actions/workflows/release-images.yml)
+[![Release Helm Chart](https://github.com/JudgeZ/OSS-AI-Agent-Tool/actions/workflows/release-charts.yml/badge.svg)](../../actions/workflows/release-charts.yml)
 
 
 Local-first, auditable, multi-agent coding assistant with a desktop GUI.
