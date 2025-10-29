@@ -1,0 +1,7 @@
+{
+  "name": "oss-ai-agent-tool",
+  "private": true,
+  "workspaces": [
+    "services/orchestrator"
+  ]
+}

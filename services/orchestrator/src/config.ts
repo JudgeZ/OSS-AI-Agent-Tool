@@ -29,7 +29,13 @@ export function loadConfig(): AppConfig {
     messaging: fileCfg.messaging || { type: (process.env.MESSAGE_BUS as any) || "rabbitmq" },
     providers: {
       defaultRoute: "balanced",
-      enabled: (process.env.PROVIDERS || "openai,local_ollama").split(",").map(s => s.trim())
+      enabled: (() => {
+        const providersEnv = process.env.PROVIDERS ?? "openai,local_ollama";
+        return providersEnv
+          .split(",")
+          .map(provider => provider.trim())
+          .filter((provider): provider is string => provider.length > 0);
+      })()
     },
     auth: { oauth: { redirectBaseUrl: process.env.OAUTH_REDIRECT_BASE || "http://localhost:8080" } },
     secrets: { backend: (process.env.SECRETS_BACKEND as any) || "localfile" }
