@@ -1,10 +1,5 @@
 # OSS AI Agent Tool
 
-[![CI](https://github.com/JudgeZ/OSS-AI-Agent-Tool/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
-[![Release Images](https://github.com/JudgeZ/OSS-AI-Agent-Tool/actions/workflows/release-images.yml/badge.svg)](../../actions/workflows/release-images.yml)
-[![Release Helm Chart](https://github.com/JudgeZ/OSS-AI-Agent-Tool/actions/workflows/release-charts.yml/badge.svg)](../../actions/workflows/release-charts.yml)
-
-
 Local-first, auditable, multi-agent coding assistant with a desktop GUI.
 
 - **Reliability**: gRPC “inner loop” + MQ “outer loop”, idempotent jobs, SSE streaming.
