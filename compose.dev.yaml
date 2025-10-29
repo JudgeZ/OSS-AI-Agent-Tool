@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  orchestrator:
+    image: node:20-alpine
+    working_dir: /workspace/services/orchestrator
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - ./:/workspace:delegated
+    ports:
+      - "3000:3000"
+
+  gateway:
+    image: golang:1.22-alpine
+    working_dir: /workspace/apps/gateway-api
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - ./:/workspace:delegated
+    ports:
+      - "8080:8080"
