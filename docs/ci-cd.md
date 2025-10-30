@@ -1,56 +1,68 @@
 # CI/CD for OSS AI Agent Tool
 
-This repository ships with **GitHub Actions** that:
-1) Build and test on PRs (`CI`),  
-2) Build, push, **sign (cosign)**, and generate **CycloneDX SBOMs** for Docker images on tags (`Release Images`), and  
-3) Package and publish the **Helm chart** to **GitHub Pages** and **GHCR (OCI)** (`Release Helm Chart`).
+The repository ships with **four GitHub Actions workflows** that cover build/test automation, release packaging, and continuous security scanning. All workflows are located in `.github/workflows/` and support manual dispatches for ad-hoc runs.
 
-## 1) CI (PRs & main)
-- Workflow: `.github/workflows/ci.yml`
-- Builds Go, Node, Rust components.
-- Builds Docker images (no push).
+## Continuous Integration (`ci.yml`)
+- **Triggers:** pull requests targeting `main`, pushes to `main`, or manual `Run workflow` dispatches.
+- **What runs:**
+  - Go formatting/vet/test (`go fmt`, `go vet`, `go test`) whenever a `go.mod` is present.
+  - TypeScript linting, `tsc --noEmit` type-checks, unit tests (via `npm test --if-present`), and builds for each workspace (`services/orchestrator`, `apps/cli`).
+  - Rust `fmt`, `clippy`, and `cargo test` when a `Cargo.toml` appears (future indexer service).
+- **Pass criteria:** all language jobs must succeed; any lint/test failure blocks the PR/merge.
 
-## 2) Release images + signing + SBOM
-- Workflow: `.github/workflows/release-images.yml`
-- Trigger: push tags `v*` (e.g., `v0.2.0`).
-- Actions:
-  - Build & push to `ghcr.io/<owner>/oss-ai-agent-tool/<service>:{tag},latest`
-  - **Sign images with `cosign` (keyless OIDC)** — no private key needed.
-  - Generate **CycloneDX** SBOM with Syft and attach to GitHub Release.
+### How to run it manually
+1. Navigate to **Actions → CI → Run workflow**.
+2. Select the target branch (default: `main`).
+3. Click **Run workflow**.
 
-**Required repository settings:**
-- Settings → Actions → General → Workflow permissions → `Read and write permissions`
-- Workflow file `permissions` already requests:
-  - `packages: write`
-  - `contents: write`
-  - `id-token: write` (for **cosign keyless**)
-- No secrets are needed for keyless signing; ensure OIDC is enabled (default on GitHub).
+## Container Releases (`release-images.yml`)
+- **Triggers:** annotated/lightweight tags matching `v*` (e.g., `v0.3.0`) or manual dispatch.
+- **What runs:** for each service with a Dockerfile (`apps/gateway-api`, `services/orchestrator`, `services/indexer`), the workflow:
+  1. Builds and pushes multi-arch images to `ghcr.io/<owner>/oss-ai-agent-tool/<service>`.
+  2. Generates a CycloneDX JSON SBOM via `anchore/sbom-action`.
+  3. Performs **keyless cosign signing** using GitHub OIDC (`id-token: write` permission — no secrets required).
+  4. Uploads the SBOM to the GitHub Release and retains it as an artifact.
 
-## 3) Release Helm Chart
-- Workflow: `.github/workflows/release-charts.yml`
-- Trigger: push tags `v*` or `chart-*`, or run manually.
-- Publishes the chart in two ways:
-  - **GitHub Pages index** (via `helm/chart-releaser-action`).
-  - **OCI registry**: `oci://ghcr.io/<owner>/oss-ai-agent-tool/charts`.
+### Repository/permission requirements
+- Settings → Actions → General → Workflow permissions → **Read and write permissions**.
+- Default `GITHUB_TOKEN` scopes are sufficient (`contents: write`, `packages: write`, `id-token: write`).
+- Ensure GitHub Packages is enabled for the organization; no additional secrets are necessary for cosign keyless signing.
 
-**Install from OCI:**
+### Manual release run
+1. Create a tag (`git tag v0.3.0 && git push origin v0.3.0`) **or** trigger via Actions → Release Images → Run workflow.
+2. Monitor the workflow for SBOM assets and cosign signature logs.
+3. Download SBOMs from the job summary or the GitHub Release attachments.
+
+## Helm Chart Publishing (`release-charts.yml`)
+- **Triggers:** `v*` or `chart-*` tags, plus manual dispatches.
+- **What runs:**
+  - `helm lint` and `helm package` for `charts/oss-ai-agent-tool`.
+  - Publishes the chart to the GitHub Pages index via `helm/chart-releaser-action`.
+  - Pushes OCI artifacts to `oci://ghcr.io/<owner>/oss-ai-agent-tool/charts` after logging into GHCR with the Actions token.
+
+### Install from OCI
 ```bash
-helm registry login ghcr.io -u <you> -p <token>
+helm registry login ghcr.io -u <github-username> -p <personal-access-token>
 helm pull oci://ghcr.io/<owner>/oss-ai-agent-tool/charts/oss-ai-agent-tool --version <x.y.z>
 ```
 
-## Image coordinates in Helm
-Set image repo/tag at install time:
-```bash
-helm upgrade --install oss-ai charts/oss-ai-agent-tool \
-  --namespace oss-ai --create-namespace \
-  --set image.repo=ghcr.io/<owner>/oss-ai-agent-tool \
-  --set image.tag=<tag>
-```
+### Manual chart release
+1. Tag the repo (`git tag chart-0.3.0 && git push origin chart-0.3.0`) or dispatch from Actions.
+2. Confirm the workflow published a `.tgz` to the `gh-pages` branch and pushed the OCI artifact.
+3. Update downstream environments with the new chart version.
 
-## Verifying signatures
-```bash
-cosign verify ghcr.io/<owner>/oss-ai-agent-tool/gateway-api:<tag>
-cosign verify ghcr.io/<owner>/oss-ai-agent-tool/orchestrator:<tag>
-cosign verify ghcr.io/<owner>/oss-ai-agent-tool/indexer:<tag>
-```
+## Security Scanning (`security.yml`)
+- **Triggers:** pull requests, pushes to `main`, a weekly cron (`0 3 * * 1`), and manual dispatches.
+- **What runs:**
+  - Trivy filesystem scan (CRITICAL/HIGH severities fail the job).
+  - Trivy container image scans for each Dockerfile (skips automatically when a Dockerfile is absent).
+  - Semgrep SAST using the `auto` ruleset.
+  - CodeQL analysis for Go and TypeScript/JavaScript.
+  - Gitleaks secret detection (`detect --redact`).
+- **Why it matters:** all jobs must pass; any vulnerability or secret finding blocks merges until addressed.
+
+## Release notes automation (`release-drafter.yml`)
+`Release Drafter` groups merged pull requests by category and prepares draft notes tagged as `v<next patch>`. It runs automatically via the GitHub App once enabled in repository settings.
+
+## Renovate
+`renovate.json` (already present) continues to manage dependency update PRs. Combine it with the CI & security workflows to ensure automated updates remain safe.

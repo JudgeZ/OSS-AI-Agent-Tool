@@ -1,0 +1,140 @@
+name: Release Images
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: oss-ai-agent-tool
+
+jobs:
+  build-and-publish:
+    name: Build, push, sign & SBOM (${{ matrix.image.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: gateway-api
+            context: apps/gateway-api
+            dockerfile: apps/gateway-api/Dockerfile
+          - name: orchestrator
+            context: services/orchestrator
+            dockerfile: services/orchestrator/Dockerfile
+          - name: indexer
+            context: services/indexer
+            dockerfile: services/indexer/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Dockerfile presence
+        id: dockerfile
+        run: |
+          if [ -f "${{ matrix.image.dockerfile }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Dockerfile ${{ matrix.image.dockerfile }} not found, skipping build." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Prepare image coordinates
+        id: coords
+        if: steps.dockerfile.outputs.exists == 'true'
+        run: |
+          owner_lower=${GITHUB_REPOSITORY_OWNER,,}
+          echo "repository=${{ env.REGISTRY }}/$owner_lower/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image.name }}" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Log in to GHCR
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels)
+        if: steps.dockerfile.outputs.exists == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.coords.outputs.repository }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+
+      - name: Build and push image
+        if: steps.dockerfile.outputs.exists == 'true'
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate SBOM (CycloneDX)
+        if: steps.dockerfile.outputs.exists == 'true'
+        id: sbom
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.coords.outputs.repository }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: ${{ matrix.image.name }}-sbom.cdx.json
+
+      - name: Install cosign
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image (keyless)
+        if: steps.dockerfile.outputs.exists == 'true'
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes ${{ steps.coords.outputs.repository }}@${{ steps.build.outputs.digest }}
+
+      - name: Upload SBOM to release
+        if: steps.dockerfile.outputs.exists == 'true' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.image.name }}-sbom.cdx.json
+          append_body: true
+          body: "Signed container image ${{ matrix.image.name }} published with SBOM."
+
+      - name: Upload SBOM artifact
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.image.name }}-sbom
+          path: ${{ matrix.image.name }}-sbom.cdx.json
+          retention-days: 5
+
+      - name: Skip summary
+        if: steps.dockerfile.outputs.exists != 'true'
+        run: echo "No Dockerfile for ${{ matrix.image.name }} — build skipped." >> "$GITHUB_STEP_SUMMARY"
