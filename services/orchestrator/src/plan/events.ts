@@ -1,6 +1,13 @@
 import { EventEmitter } from "node:events";
 
-export type PlanStepState = "queued" | "running" | "waiting_approval" | "completed" | "failed";
+export type PlanStepState =
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "approved"
+  | "rejected"
+  | "completed"
+  | "failed";
 
 export type PlanStepEvent = {
   event: "plan.step";
@@ -59,6 +66,20 @@ export function publishPlanStepEvent(event: PlanStepEvent): void {
 export function getPlanHistory(planId: string): PlanStepEvent[] {
   const entry = history.get(planId);
   return entry ? [...entry.events] : [];
+}
+
+export function getLatestPlanStepEvent(planId: string, stepId: string): PlanStepEvent | undefined {
+  const entry = history.get(planId);
+  if (!entry) {
+    return undefined;
+  }
+  for (let index = entry.events.length - 1; index >= 0; index -= 1) {
+    const event = entry.events[index];
+    if (event.step.id === stepId) {
+      return event;
+    }
+  }
+  return undefined;
 }
 
 export function subscribeToPlanSteps(planId: string, listener: (event: PlanStepEvent) => void): () => void {

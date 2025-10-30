@@ -4,7 +4,7 @@ import path from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearPlanHistory } from "./plan/events.js";
+import { clearPlanHistory, getPlanHistory, publishPlanStepEvent } from "./plan/events.js";
 
 vi.mock("./providers/ProviderRegistry.js", () => {
   return {
@@ -53,6 +53,108 @@ describe("orchestrator http api", () => {
 
     expect(eventsResponse.body.events).toHaveLength(planResponse.body.plan.steps.length);
     expect(eventsResponse.body.events[0].step.capability).toBeDefined();
+  });
+
+  describe("step approvals", () => {
+    it("publishes approval events when a pending step is approved", async () => {
+      const { createServer } = await import("./index.js");
+      const app = createServer();
+
+      const planResponse = await request(app).post("/plan").send({ goal: "Request approval" }).expect(201);
+      const planId: string = planResponse.body.plan.id;
+      const approvalStep = planResponse.body.plan.steps.find((step: { approval: boolean }) => step.approval);
+      if (!approvalStep) {
+        throw new Error("expected an approval-requiring step");
+      }
+
+      publishPlanStepEvent({
+        event: "plan.step",
+        traceId: "trace-approval",
+        planId,
+        step: {
+          id: approvalStep.id,
+          state: "waiting_approval",
+          capability: approvalStep.capability,
+          timeout_s: approvalStep.timeout_s,
+          approval: true,
+          summary: "Awaiting confirmation"
+        }
+      });
+
+      await request(app)
+        .post(`/plan/${planId}/steps/${approvalStep.id}/approve`)
+        .send({ decision: "approve", rationale: "Looks good" })
+        .expect(204);
+
+      const events = getPlanHistory(planId).filter(event => event.step.id === approvalStep.id);
+      expect(events[events.length - 1].step.state).toBe("approved");
+      expect(events[events.length - 1].step.summary).toContain("Looks good");
+    });
+
+    it("publishes rejection events when a pending step is rejected", async () => {
+      const { createServer } = await import("./index.js");
+      const app = createServer();
+
+      const planResponse = await request(app).post("/plan").send({ goal: "Reject approval" }).expect(201);
+      const planId: string = planResponse.body.plan.id;
+      const approvalStep = planResponse.body.plan.steps.find((step: { approval: boolean }) => step.approval);
+      if (!approvalStep) {
+        throw new Error("expected an approval-requiring step");
+      }
+
+      publishPlanStepEvent({
+        event: "plan.step",
+        traceId: "trace-reject",
+        planId,
+        step: {
+          id: approvalStep.id,
+          state: "waiting_approval",
+          capability: approvalStep.capability,
+          timeout_s: approvalStep.timeout_s,
+          approval: true,
+          summary: "Pending" 
+        }
+      });
+
+      await request(app)
+        .post(`/plan/${planId}/steps/${approvalStep.id}/approve`)
+        .send({ decision: "reject", rationale: "Needs work" })
+        .expect(204);
+
+      const events = getPlanHistory(planId).filter(event => event.step.id === approvalStep.id);
+      expect(events[events.length - 1].step.state).toBe("rejected");
+      expect(events[events.length - 1].step.summary).toContain("Needs work");
+    });
+
+    it("returns a conflict when the step is not awaiting approval", async () => {
+      const { createServer } = await import("./index.js");
+      const app = createServer();
+
+      const planResponse = await request(app).post("/plan").send({ goal: "Invalid state" }).expect(201);
+      const planId: string = planResponse.body.plan.id;
+      const approvalStep = planResponse.body.plan.steps.find((step: { approval: boolean }) => step.approval);
+      if (!approvalStep) {
+        throw new Error("expected an approval-requiring step");
+      }
+
+      await request(app)
+        .post(`/plan/${planId}/steps/${approvalStep.id}/approve`)
+        .send({ decision: "approve" })
+        .expect(409);
+    });
+
+    it("returns not found when the step has no history", async () => {
+      const { createServer } = await import("./index.js");
+      const app = createServer();
+
+      const planResponse = await request(app).post("/plan").send({ goal: "Unknown step" }).expect(201);
+      const planId: string = planResponse.body.plan.id;
+
+      await request(app)
+        .post(`/plan/${planId}/steps/does-not-exist/approve`)
+        .send({ decision: "approve" })
+        .expect(404);
+    });
   });
 
   it("routes chat requests through the provider registry", async () => {

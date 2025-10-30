@@ -3,7 +3,13 @@ import cors from "cors";
 import morgan from "morgan";
 
 import { createPlan } from "./plan/planner.js";
-import { getPlanHistory, subscribeToPlanSteps, type PlanStepEvent } from "./plan/events.js";
+import {
+  getLatestPlanStepEvent,
+  getPlanHistory,
+  publishPlanStepEvent,
+  subscribeToPlanSteps,
+  type PlanStepEvent
+} from "./plan/events.js";
 import { routeChat } from "./providers/ProviderRegistry.js";
 import { withSpan } from "./observability/tracing.js";
 import { initializePlanQueueRuntime, submitPlanSteps } from "./queue/PlanQueueRuntime.js";
@@ -95,6 +101,37 @@ export function createServer(): Express {
       const events = getPlanHistory(id);
       res.json({ events });
     }
+  });
+
+  app.post("/plan/:planId/steps/:stepId/approve", (req: Request, res: Response) => {
+    const { planId, stepId } = req.params;
+    const latest = getLatestPlanStepEvent(planId, stepId);
+    if (!latest) {
+      res.status(404).json({ error: "Step not found" });
+      return;
+    }
+
+    if (latest.step.state !== "waiting_approval") {
+      res.status(409).json({ error: "Step is not awaiting approval" });
+      return;
+    }
+
+    const decision: "approved" | "rejected" = req.body?.decision === "reject" ? "rejected" : "approved";
+    const rationale = typeof req.body?.rationale === "string" ? req.body.rationale.trim() : "";
+    const summary = rationale ? `${latest.step.summary ?? ""}${latest.step.summary ? " " : ""}(${decision}: ${rationale})` : latest.step.summary;
+
+    publishPlanStepEvent({
+      event: "plan.step",
+      traceId: latest.traceId,
+      planId,
+      step: {
+        ...latest.step,
+        state: decision,
+        summary
+      }
+    });
+
+    res.status(204).end();
   });
 
   app.post("/chat", async (req: Request, res: Response, next: NextFunction) => {
