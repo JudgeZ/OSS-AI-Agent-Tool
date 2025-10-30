@@ -6,6 +6,12 @@ import { createPlan } from "./plan/planner.js";
 import { getPlanHistory, subscribeToPlanSteps, type PlanStepEvent } from "./plan/events.js";
 import { routeChat } from "./providers/ProviderRegistry.js";
 import { withSpan } from "./observability/tracing.js";
+import { initializePlanQueueRuntime, submitPlanSteps } from "./queue/PlanQueueRuntime.js";
+
+initializePlanQueueRuntime().catch(error => {
+  // eslint-disable-next-line no-console
+  console.error("Failed to initialize queue runtime", error);
+});
 
 function formatSse(event: PlanStepEvent): string {
   return `event: ${event.event}\ndata: ${JSON.stringify(event)}\n\n`;
@@ -32,6 +38,7 @@ export function createServer(): Express {
           const plan = createPlan(goal);
           span.setAttribute("plan.id", plan.id);
           span.setAttribute("plan.steps", plan.steps.length);
+          await submitPlanSteps(plan, span.context.traceId);
           return { plan, traceId: span.context.traceId };
         },
         { route: "/plan" }

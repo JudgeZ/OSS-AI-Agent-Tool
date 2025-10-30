@@ -12,6 +12,13 @@ vi.mock("./providers/ProviderRegistry.js", () => {
   };
 });
 
+vi.mock("./queue/PlanQueueRuntime.js", () => {
+  return {
+    initializePlanQueueRuntime: vi.fn().mockResolvedValue(undefined),
+    submitPlanSteps: vi.fn().mockResolvedValue(undefined)
+  };
+});
+
 describe("orchestrator http api", () => {
   beforeEach(() => {
     process.env.NODE_ENV = "test";
@@ -33,6 +40,9 @@ describe("orchestrator http api", () => {
     expect(planResponse.body.plan).toBeDefined();
     expect(planResponse.body.plan.goal).toBe("Ship the next milestone");
     expect(planResponse.body.traceId).toBeTruthy();
+
+    const { submitPlanSteps } = await import("./queue/PlanQueueRuntime.js");
+    expect(submitPlanSteps).toHaveBeenCalledWith(expect.objectContaining({ id: planResponse.body.plan.id }), expect.any(String));
 
     const planId: string = planResponse.body.plan.id;
 
