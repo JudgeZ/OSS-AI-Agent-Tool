@@ -50,14 +50,26 @@ export function createServer(): Express {
       res.setHeader("Connection", "keep-alive");
       res.flushHeaders?.();
 
-      const history = getPlanHistory(id);
-      history.forEach(event => {
+      let replayingHistory = true;
+      const buffered: PlanStepEvent[] = [];
+
+      const writeEvent = (event: PlanStepEvent) => {
         res.write(formatSse(event));
-      });
+      };
 
       const unsubscribe = subscribeToPlanSteps(id, event => {
-        res.write(formatSse(event));
+        if (replayingHistory) {
+          buffered.push(event);
+          return;
+        }
+        writeEvent(event);
       });
+
+      const history = getPlanHistory(id);
+      history.forEach(writeEvent);
+
+      replayingHistory = false;
+      buffered.splice(0).forEach(writeEvent);
 
       const keepAlive = setInterval(() => {
         res.write(": keep-alive\n\n");
