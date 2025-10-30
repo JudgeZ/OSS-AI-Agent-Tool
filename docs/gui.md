@@ -39,7 +39,7 @@ npm run tauri:build  # produces distributable binaries
 
 ## SSE timeline
 
-The frontend listens for `plan.step` events emitted by the orchestrator at `/plans/:planId/stream`. Every event updates the timeline, appending the latest status transition and highlighting the associated capability badge. Connection state is surfaced at the top of the page so operators can quickly validate the stream health.
+The frontend listens for `plan.step` events emitted by the orchestrator at `/plan/:planId/events`. Every event updates the timeline, appending the latest status transition and highlighting the associated capability badge. Connection state is surfaced at the top of the page so operators can quickly validate the stream health.
 
 ## Approval UX
 

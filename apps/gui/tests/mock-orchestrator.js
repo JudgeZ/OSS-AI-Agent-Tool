@@ -116,7 +116,7 @@ function clearPlanTimers(planId) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const sseMatch = url.pathname.match(/^\/plans\/([^/]+)\/stream$/);
+  const sseMatch = url.pathname.match(/^\/plan\/([^/]+)\/events$/);
   const approveMatch = url.pathname.match(/^\/plan\/([^/]+)\/steps\/([^/]+)\/approve$/);
 
   if (req.method === 'GET' && sseMatch) {
