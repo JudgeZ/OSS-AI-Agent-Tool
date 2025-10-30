@@ -317,6 +317,8 @@ Before merge
 
  OTel traces & SSE events emitted
 
+ Tests executed and passing before advancing; if a valid bypass is required, document the rationale and obtain approval prior to proceeding
+
  Tests pass; artifacts captured
 
  PR includes risks/rollback; docs updated
