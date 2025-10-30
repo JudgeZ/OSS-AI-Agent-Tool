@@ -1,5 +1,22 @@
-export type ChatRequest = { model?: string; messages: { role: "system"|"user"|"assistant"; content: string }[]; };
-export type ChatResponse = { output: string; usage?: { promptTokens?: number; completionTokens?: number } };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+export type ChatRequest = {
+  model?: string;
+  messages: ChatMessage[];
+};
+
+export type TokenUsage = {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+};
+
+export type ChatResponse = {
+  output: string;
+  provider?: string;
+  usage?: TokenUsage;
+  warnings?: string[];
+};
 
 export interface ModelProvider {
   name: string;
