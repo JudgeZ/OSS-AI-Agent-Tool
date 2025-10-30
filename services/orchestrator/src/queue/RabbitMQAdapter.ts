@@ -209,10 +209,23 @@ export class RabbitMQAdapter implements QueueAdapter {
       return;
     }
     const channel = await this.ensureChannel();
-    const payload = JSON.parse(msg.content.toString()) as T;
     const headers = normaliseHeaders(msg.properties.headers);
-    const attempts = Number(headers["x-attempts"] ?? 0);
     const idempotencyKey = headers["x-idempotency-key"];
+    let payload: T;
+    try {
+      payload = JSON.parse(msg.content.toString()) as T;
+    } catch (error) {
+      this.logger.error?.(
+        `Failed to parse message from ${queue}: ${(error as Error).message}`
+      );
+      channel.ack(msg);
+      if (idempotencyKey) {
+        this.releaseKey(idempotencyKey);
+      }
+      await this.refreshDepth(queue);
+      return;
+    }
+    const attempts = Number(headers["x-attempts"] ?? 0);
 
     const queueMessage: QueueMessage<T> = {
       id: msg.properties.messageId || idempotencyKey || randomUUID(),

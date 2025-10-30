@@ -50,6 +50,19 @@ class MockChannel {
     return true;
   }
 
+  deliverRaw(queue: string, content: Buffer, options: Options.Publish = {}): void {
+    const messages = this.queues.get(queue) ?? [];
+    const stored: StoredMessage = { queue, content, options, acked: false };
+    messages.push(stored);
+    this.queues.set(queue, messages);
+
+    const consumer = this.consumers.get(queue);
+    if (consumer) {
+      const msg = this.createMessage(queue, stored);
+      queueMicrotask(() => consumer(msg));
+    }
+  }
+
   async checkQueue(queue: string): Promise<{ messageCount: number; consumerCount: number }> {
     return {
       messageCount: this.getDepth(queue),
@@ -196,5 +209,25 @@ describe("RabbitMQAdapter", () => {
 
     expect(channel.getDepth("plan.steps")).toBe(0);
     expect(channel.getPublishedCount("plan.steps.dead")).toBe(1);
+  });
+
+  it("acknowledges poison messages when JSON parsing fails", async () => {
+    const handler = vi.fn();
+    await adapter.consume("plan.steps", async message => {
+      handler(message);
+    });
+
+    channel.deliverRaw("plan.steps", Buffer.from("not-json"), {
+      headers: { "x-idempotency-key": "invalid:message" },
+      messageId: "invalid:message"
+    });
+
+    await flushMicrotasks();
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(channel.getDepth("plan.steps")).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to parse message from plan.steps")
+    );
   });
 });
