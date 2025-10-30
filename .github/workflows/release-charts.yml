@@ -1,0 +1,75 @@
+name: Release Helm Charts
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'chart-*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-charts-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHART_DIR: charts/oss-ai-agent-tool
+  CHART_PACKAGE_DIR: .cr-release-packages
+
+jobs:
+  helm-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Lint chart
+        run: helm lint ${{ env.CHART_DIR }}
+
+      - name: Package chart
+        run: |
+          mkdir -p ${{ env.CHART_PACKAGE_DIR }}
+          helm package ${{ env.CHART_DIR }} --destination ${{ env.CHART_PACKAGE_DIR }}
+
+      - name: Publish chart to GitHub Pages
+        uses: helm/chart-releaser-action@v1.6.0
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: v1.6.0
+          command: upload
+          packages_dir: ${{ env.CHART_PACKAGE_DIR }}
+          charts_dir: charts
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push chart to GHCR (OCI)
+        run: |
+          owner_lower=${GITHUB_REPOSITORY_OWNER,,}
+          for chart in ${{ env.CHART_PACKAGE_DIR }}/*.tgz; do
+            helm push --force "$chart" oci://ghcr.io/$owner_lower/oss-ai-agent-tool/charts
+          done
+        env:
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
