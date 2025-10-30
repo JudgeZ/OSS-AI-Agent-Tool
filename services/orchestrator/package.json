@@ -15,6 +15,7 @@
     "amqplib": "^0.10.3",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "libsodium-wrappers-sumo": "^0.7.13",
     "morgan": "^1.10.0",
     "openai": "^6.7.0",
     "openrouter-client": "^1.6.2",

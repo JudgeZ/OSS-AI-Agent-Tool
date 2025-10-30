@@ -31,7 +31,7 @@ export function loadConfig(): AppConfig {
       defaultRoute: "balanced",
       enabled: (process.env.PROVIDERS || "openai,local_ollama").split(",").map(s => s.trim())
     },
-    auth: { oauth: { redirectBaseUrl: process.env.OAUTH_REDIRECT_BASE || "http://localhost:8080" } },
+    auth: { oauth: { redirectBaseUrl: process.env.OAUTH_REDIRECT_BASE || "http://127.0.0.1:8080" } },
     secrets: { backend: (process.env.SECRETS_BACKEND as any) || "localfile" }
   };
 }

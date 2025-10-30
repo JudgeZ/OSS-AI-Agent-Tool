@@ -15,7 +15,7 @@ let secretsStore: SecretsStore | undefined;
 let cachedRegistry: Record<string, ModelProvider> | undefined;
 const overrides = new Map<string, ModelProvider>();
 
-function getSecretsStore(): SecretsStore {
+export function getSecretsStore(): SecretsStore {
   if (!secretsStore) {
     const cfg = loadConfig();
     secretsStore = cfg.secrets.backend === "vault" ? new VaultStore() : new LocalFileStore();

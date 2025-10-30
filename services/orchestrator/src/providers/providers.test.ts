@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeAll, afterAll, vi } from "vitest";
 
 import type { SecretsStore } from "../auth/SecretsStore.js";
 import type { ChatResponse, ModelProvider } from "./interfaces.js";
@@ -21,6 +21,19 @@ class MockSecretsStore implements SecretsStore {
 
 describe("providers", () => {
   const originalProvidersEnv = process.env.PROVIDERS;
+  const originalPassphrase = process.env.LOCAL_SECRETS_PASSPHRASE;
+
+  beforeAll(() => {
+    process.env.LOCAL_SECRETS_PASSPHRASE = process.env.LOCAL_SECRETS_PASSPHRASE || "test-passphrase";
+  });
+
+  afterAll(() => {
+    if (originalPassphrase === undefined) {
+      delete process.env.LOCAL_SECRETS_PASSPHRASE;
+    } else {
+      process.env.LOCAL_SECRETS_PASSPHRASE = originalPassphrase;
+    }
+  });
 
   afterEach(() => {
     clearProviderOverrides();
