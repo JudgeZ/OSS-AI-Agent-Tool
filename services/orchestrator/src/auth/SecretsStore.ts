@@ -27,6 +27,7 @@ export class LocalFileStore implements SecretsStore {
   private readonly filePath: string;
   private readonly passphrase: string;
   private salt?: Uint8Array;
+  private persistChain: Promise<void> = Promise.resolve();
 
   constructor(options?: LocalStoreOptions) {
     const defaultPath = path.join(homedir(), ".oss-orchestrator", "secrets.json");
@@ -43,13 +44,13 @@ export class LocalFileStore implements SecretsStore {
   async set(key: string, value: string): Promise<void> {
     await this.ready;
     this.cache.set(key, value);
-    await this.persist();
+    await this.enqueuePersist();
   }
 
   async delete(key: string): Promise<void> {
     await this.ready;
     this.cache.delete(key);
-    await this.persist();
+    await this.enqueuePersist();
   }
 
   private async initialize() {
@@ -101,6 +102,12 @@ export class LocalFileStore implements SecretsStore {
       sodium.crypto_pwhash_MEMLIMIT_MODERATE,
       sodium.crypto_pwhash_ALG_DEFAULT
     );
+  }
+
+  private enqueuePersist(): Promise<void> {
+    const run = this.persistChain.then(() => this.persist());
+    this.persistChain = run.catch(() => {});
+    return run;
   }
 
   private async persist() {
