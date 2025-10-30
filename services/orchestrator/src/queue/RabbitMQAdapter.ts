@@ -228,28 +228,42 @@ export class RabbitMQAdapter implements QueueAdapter {
       },
       retry: async (options?: RetryOptions) => {
         queueRetryCounter.labels(queue).inc();
-        channel.ack(msg);
-        await this.publish(queue, payload, {
-          idempotencyKey,
-          headers,
-          attempt: attempts + 1,
-          skipDedupe: true,
-          delayMs: options?.delayMs ?? this.retryDelayMs
-        });
-        await this.refreshDepth(queue);
+        try {
+          await this.publish(queue, payload, {
+            idempotencyKey,
+            headers,
+            attempt: attempts + 1,
+            skipDedupe: true,
+            delayMs: options?.delayMs ?? this.retryDelayMs
+          });
+          channel.ack(msg);
+          await this.refreshDepth(queue);
+        } catch (error) {
+          this.logger.error?.(
+            `Failed to republish message for retry on ${queue}: ${(error as Error).message}`
+          );
+          channel.nack(msg, false, true);
+        }
       },
       deadLetter: async (options?: DeadLetterOptions) => {
-        channel.ack(msg);
         const reason = options?.reason ?? "unspecified";
         const targetQueue = options?.queue ?? `${queue}.dead`;
-        await this.publish(targetQueue, payload, {
-          headers: { ...headers, "x-dead-letter-reason": reason },
-          skipDedupe: true
-        });
-        if (idempotencyKey) {
-          this.releaseKey(idempotencyKey);
+        try {
+          await this.publish(targetQueue, payload, {
+            headers: { ...headers, "x-dead-letter-reason": reason },
+            skipDedupe: true
+          });
+          channel.ack(msg);
+          if (idempotencyKey) {
+            this.releaseKey(idempotencyKey);
+          }
+          await this.refreshDepth(queue);
+        } catch (error) {
+          this.logger.error?.(
+            `Failed to dead-letter message from ${queue} to ${targetQueue}: ${(error as Error).message}`
+          );
+          channel.nack(msg, false, true);
         }
-        await this.refreshDepth(queue);
       }
     };
 
@@ -275,21 +289,30 @@ export class RabbitMQAdapter implements QueueAdapter {
       ...headerOverrides,
       "x-attempts": String(attempt ?? 0)
     };
+    let keyAdded = false;
     if (idempotencyKey) {
       headers["x-idempotency-key"] = idempotencyKey;
       if (!skipDedupe && this.inflightKeys.has(idempotencyKey)) {
         return;
       }
+      keyAdded = !this.inflightKeys.has(idempotencyKey);
       this.inflightKeys.add(idempotencyKey);
     }
 
     const messageId = idempotencyKey ?? randomUUID();
     const content = Buffer.from(JSON.stringify(payload));
-    channel.sendToQueue(queue, content, {
-      persistent: true,
-      messageId,
-      headers
-    });
+    try {
+      channel.sendToQueue(queue, content, {
+        persistent: true,
+        messageId,
+        headers
+      });
+    } catch (error) {
+      if (idempotencyKey && keyAdded) {
+        this.releaseKey(idempotencyKey);
+      }
+      throw error;
+    }
 
     await this.refreshDepth(queue);
   }
