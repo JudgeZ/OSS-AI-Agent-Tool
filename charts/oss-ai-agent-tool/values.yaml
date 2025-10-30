@@ -18,6 +18,11 @@ orchestrator:
   env:
     OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "false"
+    RABBITMQ_USERNAME: guest
+    RABBITMQ_PASSWORD: guest
+    RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    RABBITMQ_PREFETCH: "8"
+    RABBITMQ_RETRY_DELAY_MS: "1000"
   hpa:
     min: 2
     max: 10
@@ -29,6 +34,11 @@ postgres:
   enabled: true
 rabbitmq:
   enabled: true
+  host: rabbitmq
+  port: 5672
+  username: guest
+  passwordSecretName: ""
+  passwordSecretKey: password
 kafka:
   enabled: false
 
