@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -34,58 +33,6 @@ type stateData struct {
 	CodeVerifier string
 	ExpiresAt    time.Time
 	State        string
-}
-
-type stateCache struct {
-	mu    sync.Mutex
-	items map[string]stateData
-}
-
-func newStateCache() *stateCache {
-	return &stateCache{items: make(map[string]stateData)}
-}
-
-func (c *stateCache) set(state string, data stateData) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.items[state] = data
-}
-
-func (c *stateCache) pop(state string) (stateData, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	data, ok := c.items[state]
-	if !ok {
-		return stateData{}, false
-	}
-	if time.Now().After(data.ExpiresAt) {
-		delete(c.items, state)
-		return stateData{}, false
-	}
-	delete(c.items, state)
-	return data, true
-}
-
-var oauthStates = newStateCache()
-
-func cleanupExpiredStates() {
-	ticker := time.NewTicker(time.Minute)
-	go func() {
-		for range ticker.C {
-			now := time.Now()
-			oauthStates.mu.Lock()
-			for k, v := range oauthStates.items {
-				if now.After(v.ExpiresAt) {
-					delete(oauthStates.items, k)
-				}
-			}
-			oauthStates.mu.Unlock()
-		}
-	}()
-}
-
-func init() {
-	cleanupExpiredStates()
 }
 
 func getProviderConfig(provider string) (oauthProvider, error) {
@@ -134,13 +81,18 @@ func authorizeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oauthStates.set(state, stateData{
+	data := stateData{
 		Provider:     provider,
 		RedirectURI:  redirectURI,
 		CodeVerifier: codeVerifier,
 		ExpiresAt:    time.Now().Add(stateTTL),
 		State:        state,
-	})
+	}
+
+	if err := setStateCookie(w, r, data); err != nil {
+		http.Error(w, "failed to persist state", http.StatusInternalServerError)
+		return
+	}
 
 	authURL, err := buildAuthorizeURL(cfg, state, codeChallenge)
 	if err != nil {
@@ -173,11 +125,13 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, ok := oauthStates.pop(state)
-	if !ok || data.Provider != provider {
+	data, err := readStateCookie(r, state)
+	if err != nil || data.Provider != provider {
 		http.Error(w, "invalid or expired state", http.StatusBadRequest)
 		return
 	}
+
+	deleteStateCookie(w, r, state)
 
 	payload := map[string]string{
 		"code":          code,
@@ -224,11 +178,12 @@ func redirectError(w http.ResponseWriter, r *http.Request, _ string, errParam st
 		http.Error(w, errParam, http.StatusBadRequest)
 		return
 	}
-	data, ok := oauthStates.pop(state)
-	if !ok {
+	data, err := readStateCookie(r, state)
+	if err != nil {
 		http.Error(w, errParam, http.StatusBadRequest)
 		return
 	}
+	deleteStateCookie(w, r, state)
 	redirectWithStatus(w, r, data.RedirectURI, data.State, "error", errParam)
 }
 
@@ -327,4 +282,80 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func setStateCookie(w http.ResponseWriter, r *http.Request, data stateData) error {
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	cookie := &http.Cookie{
+		Name:     stateCookieName(data.State),
+		Value:    base64.RawURLEncoding.EncodeToString(encoded),
+		Path:     "/auth/",
+		Expires:  data.ExpiresAt,
+		MaxAge:   int(stateTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   isRequestSecure(r),
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	http.SetCookie(w, cookie)
+	return nil
+}
+
+func readStateCookie(r *http.Request, state string) (stateData, error) {
+	cookie, err := r.Cookie(stateCookieName(state))
+	if err != nil {
+		return stateData{}, err
+	}
+
+	decoded, err := base64.RawURLEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		return stateData{}, err
+	}
+
+	var data stateData
+	if err := json.Unmarshal(decoded, &data); err != nil {
+		return stateData{}, err
+	}
+
+	if data.State != state {
+		return stateData{}, errors.New("state mismatch")
+	}
+
+	if time.Now().After(data.ExpiresAt) {
+		return stateData{}, errors.New("state expired")
+	}
+
+	return data, nil
+}
+
+func deleteStateCookie(w http.ResponseWriter, r *http.Request, state string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     stateCookieName(state),
+		Value:    "",
+		Path:     "/auth/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   isRequestSecure(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func stateCookieName(state string) string {
+	return fmt.Sprintf("oauth_state_%s", state)
+}
+
+func isRequestSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto != "" {
+		return strings.EqualFold(proto, "https")
+	}
+	return false
 }
