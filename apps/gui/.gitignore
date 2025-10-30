@@ -1,0 +1,8 @@
+/node_modules
+/.svelte-kit
+/build
+/.playwright
+/src-tauri/target
+/src-tauri/.cargo
+/playwright-report
+/test-results
