@@ -3,6 +3,15 @@ import { loadConfig } from "../config.js";
 import { getSecretsStore } from "../providers/ProviderRegistry.js";
 import { type SecretsStore } from "./SecretsStore.js";
 
+type TokenResponse = {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
+  scope?: string;
+  [key: string]: unknown;
+};
+
 type ProviderConfig = {
   name: string;
   tokenUrl: string;
@@ -72,7 +81,10 @@ export async function callback(req: Request, res: Response) {
   try {
     const tokens = await exchangeCodeForTokens(cfg, code, codeVerifier);
     const store = secrets();
-    await store.set(`oauth:${provider}:tokens`, JSON.stringify(tokens));
+    await Promise.all([
+      store.set(`oauth:${provider}:access_token`, tokens.access_token),
+      store.set(`oauth:${provider}:tokens`, JSON.stringify(tokens))
+    ]);
     res.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "failed to exchange code";
@@ -80,7 +92,7 @@ export async function callback(req: Request, res: Response) {
   }
 }
 
-async function exchangeCodeForTokens(cfg: ProviderConfig, code: string, codeVerifier: string) {
+async function exchangeCodeForTokens(cfg: ProviderConfig, code: string, codeVerifier: string): Promise<TokenResponse> {
   const params = new URLSearchParams({
     code,
     code_verifier: codeVerifier,
@@ -107,7 +119,7 @@ async function exchangeCodeForTokens(cfg: ProviderConfig, code: string, codeVeri
     const text = await response.text();
     throw new Error(text || `token endpoint returned ${response.status}`);
   }
-  const payload = await response.json();
+  const payload = (await response.json()) as TokenResponse;
   if (typeof payload.access_token !== "string") {
     throw new Error("access_token missing in response");
   }
