@@ -3,6 +3,8 @@ name: Security Scans
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     - cron: '0 3 * * 1'
   workflow_dispatch:
@@ -21,6 +23,7 @@ jobs:
   trivy-fs:
     name: Trivy filesystem scan
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,6 +40,7 @@ jobs:
   trivy-image:
     name: Trivy image scan
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     strategy:
       fail-fast: false
       matrix:
@@ -82,6 +86,7 @@ jobs:
   semgrep:
     name: Semgrep SAST
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
