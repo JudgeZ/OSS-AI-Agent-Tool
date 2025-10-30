@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { loadConfig } from "../config.js";
-import { LocalFileStore, VaultStore, type SecretsStore } from "./SecretsStore.js";
+import { getSecretsStore } from "../providers/ProviderRegistry.js";
+import { type SecretsStore } from "./SecretsStore.js";
 
 type ProviderConfig = {
   name: string;
@@ -12,8 +13,7 @@ type ProviderConfig = {
 };
 
 function secrets(): SecretsStore {
-  const cfg = loadConfig();
-  return cfg.secrets.backend === "vault" ? new VaultStore() : new LocalFileStore();
+  return getSecretsStore();
 }
 
 function getProviderConfig(provider: string): ProviderConfig | undefined {
