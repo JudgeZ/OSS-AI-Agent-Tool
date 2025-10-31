@@ -15,7 +15,10 @@ import (
 
 func main() {
 	mux := http.NewServeMux()
+	startTime := time.Now()
 	gateway.RegisterAuthRoutes(mux)
+	gateway.RegisterHealthRoutes(mux, startTime)
+	gateway.RegisterEventRoutes(mux)
 
 	port := os.Getenv("PORT")
 	if port == "" {
