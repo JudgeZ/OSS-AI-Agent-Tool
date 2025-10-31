@@ -60,6 +60,27 @@ describe("plan events history", () => {
     expect(getPlanHistory(baseEvent.planId)).toHaveLength(0);
   });
 
+  it("cleans up plan history after a rejected step", () => {
+    publishPlanStepEvent(baseEvent);
+    publishPlanStepEvent({
+      ...baseEvent,
+      step: { ...baseEvent.step, state: "waiting_approval" },
+    });
+
+    publishPlanStepEvent({
+      ...baseEvent,
+      step: { ...baseEvent.step, state: "rejected" },
+    });
+
+    expect(getPlanHistory(baseEvent.planId)).toHaveLength(3);
+
+    vi.advanceTimersByTime(HISTORY_RETENTION_MS - 1);
+    expect(getPlanHistory(baseEvent.planId)).toHaveLength(3);
+
+    vi.advanceTimersByTime(1);
+    expect(getPlanHistory(baseEvent.planId)).toHaveLength(0);
+  });
+
   it("caps the stored events for a plan", () => {
     for (let index = 0; index < 250; index += 1) {
       publishPlanStepEvent({
