@@ -7,6 +7,7 @@ RUN npm ci
 FROM node:20-bookworm AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
 COPY tsconfig.json ./tsconfig.json
 COPY src ./src
 RUN npm run build
