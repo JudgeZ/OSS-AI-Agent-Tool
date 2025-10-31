@@ -42,8 +42,8 @@ Relevant environment overrides:
 | `TOOL_AGENT_TIMEOUT_MS` | Per-call timeout in milliseconds. |
 | `MESSAGING_TYPE` (preferred) / `MESSAGE_BUS` (legacy) | Forces `rabbitmq` or `kafka` regardless of YAML setting (useful in CI matrices). |
 | `SECRETS_BACKEND` | `localfile` or `vault`; coordinates with Helm `secrets.backend` and Compose mounts. |
-| `LOCAL_SECRETS_PASSPHRASE` | Required when `secrets.backend: localfile`; decrypts the local keystore. |
-| `LOCAL_SECRETS_PATH` | Optional override for the keystore path (defaults to `~/.oss-orchestrator/secrets.json`). |
+| `LOCAL_SECRETS_PASSPHRASE` | Required when `secrets.backend: localfile`; decrypts the local keystore. Compose seeds a development-safe default (`dev-local-passphrase`) and Helm's `values.yaml` uses a `change-me` placeholder. |
+| `LOCAL_SECRETS_PATH` | Optional override for the keystore path (defaults to `config/secrets/local/secrets.json` relative to the orchestrator working directory). |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Optional overrides for Google OAuth refresh flow (defaults can also be stored in SecretsStore). |
 | `GOOGLE_SERVICE_ACCOUNT` | Base64-safe JSON for Google service account credentials when running in enterprise mode. |
 | `GOOGLE_API_KEY` | Direct API key fallback for Google Gemini when OAuth/service account are not available. |
@@ -61,9 +61,11 @@ RabbitMQ is the default for local development. Kafka is recommended for enterpri
 
 | Mode | Description |
 | --- | --- |
-| `localfile` | Encrypted JSON stored at `~/.oss-orchestrator/secrets.json` (override with `LOCAL_SECRETS_PATH`). Set `LOCAL_SECRETS_PASSPHRASE` to unlock the keystore; Docker Compose can load it via `.env`. |
+| `localfile` | Encrypted JSON stored at `config/secrets/local/secrets.json` (override with `LOCAL_SECRETS_PATH`). The orchestrator creates the directory automatically; provide `LOCAL_SECRETS_PASSPHRASE` via Compose/Helm or your host environment. |
 | `vault` | HashiCorp Vault integration (enabled automatically when `runMode: enterprise`). Configure `VAULT_ADDR`, `VAULT_TOKEN`, or Kubernetes auth via Helm values. |
 
 Refer to the [Security Threat Model](./SECURITY-THREAT-MODEL.md) for mitigations tied to each backend and ensure CI includes the appropriate secret scanning rules.
+
+Compose sets `LOCAL_SECRETS_PATH=/app/config/secrets/local/secrets.json` inside the container so encrypted tokens persist across restarts. The Helm chart exposes the same variables under `orchestrator.env`; override `LOCAL_SECRETS_PASSPHRASE` with a Kubernetes `Secret` for production workloads.
 
 > **Note:** When the orchestrator boots with `secrets.backend: localfile` and no `LOCAL_SECRETS_PASSPHRASE` is provided, initialization fails with an explicit `LocalFileStore requires LOCAL_SECRETS_PASSPHRASE to be set` error so you can supply the passphrase before retrying.

@@ -41,7 +41,9 @@ orchestrator:
   service:
     type: ClusterIP
     port: 4000
-  env: {}
+  env:
+    LOCAL_SECRETS_PATH: /app/config/secrets/local/secrets.json
+    LOCAL_SECRETS_PASSPHRASE: change-me
   hpa:
     enabled: true
     min: 2

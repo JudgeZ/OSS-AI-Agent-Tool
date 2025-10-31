@@ -35,7 +35,7 @@ Some desktop clients (CLI / GUI) use a loopback redirect during OAuth consent. W
 
 - `OPENROUTER_CLIENT_ID` / `OPENROUTER_CLIENT_SECRET`: OAuth client credentials for OpenRouter.
 - `OAUTH_REDIRECT_BASE`: Public base URL for the gateway callback (defaults to `http://127.0.0.1:8080`).
-- `LOCAL_SECRETS_PASSPHRASE`: Required passphrase for encrypting the local keystore (`~/.oss-orchestrator/secrets.json`).
+- `LOCAL_SECRETS_PASSPHRASE`: Required passphrase for encrypting the local keystore (`config/secrets/local/secrets.json` by default).
 - Optional: `LOCAL_SECRETS_PATH` to override the keystore location.
 
 The `LocalFileStore` keystore derives a 256-bit encryption key from the passphrase using scrypt (`N=32768`, `r=8`, `p=1`) and seals secrets with XSalsa20-Poly1305. The same format is shared by the CLI and desktop clients so tokens remain portable across orchestrator restarts.

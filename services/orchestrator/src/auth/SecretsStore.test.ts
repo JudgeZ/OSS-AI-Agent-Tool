@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Agent } from "undici";
@@ -50,6 +50,45 @@ describe("LocalFileStore", () => {
     const reloaded = new LocalFileStore({ filePath: file, passphrase });
     expect(await reloaded.get("legacy")).toBe("value");
   }, 15000);
+
+  test("uses config/secrets/local under the current working directory", async () => {
+    const tempCwd = await mkdtemp(path.join(tmpdir(), "keystore-default-"));
+    const originalCwd = process.cwd();
+    const originalPassphrase = process.env.LOCAL_SECRETS_PASSPHRASE;
+    const originalPath = process.env.LOCAL_SECRETS_PATH;
+
+    process.chdir(tempCwd);
+    delete process.env.LOCAL_SECRETS_PATH;
+    process.env.LOCAL_SECRETS_PASSPHRASE = "dev-local-passphrase";
+
+    try {
+      const store = new LocalFileStore();
+      await store.set("example", "value");
+
+      const expectedDir = path.join(tempCwd, "config", "secrets", "local");
+      const expectedFile = path.join(expectedDir, "secrets.json");
+
+      const directoryStats = await stat(expectedDir);
+      expect(directoryStats.isDirectory()).toBe(true);
+
+      const raw = await readFile(expectedFile, "utf-8");
+      expect(raw.length).toBeGreaterThan(0);
+    } finally {
+      process.chdir(originalCwd);
+
+      if (originalPath === undefined) {
+        delete process.env.LOCAL_SECRETS_PATH;
+      } else {
+        process.env.LOCAL_SECRETS_PATH = originalPath;
+      }
+
+      if (originalPassphrase === undefined) {
+        delete process.env.LOCAL_SECRETS_PASSPHRASE;
+      } else {
+        process.env.LOCAL_SECRETS_PASSPHRASE = originalPassphrase;
+      }
+    }
+  });
 });
 
 describe("VaultStore", () => {

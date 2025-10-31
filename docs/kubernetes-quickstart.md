@@ -90,7 +90,7 @@ secrets:
 orchestrator:
   env:
     LOCAL_SECRETS_PASSPHRASE: "change-me"
-# Optional: direct the keystore somewhere other than ~/.oss-orchestrator/secrets.json
+# Optional: direct the keystore somewhere other than /app/config/secrets/local/secrets.json
 #   LOCAL_SECRETS_PATH: /mnt/credentials/secrets.json
 observability:
   jaeger:
@@ -101,7 +101,7 @@ observability:
 
 Override with enterprise settings (Vault secrets, Kafka, OIDC) when deploying to production. Reference [Configuration](./configuration.md) and the chart README for all options.
 
-With `secrets.backend: localfile`, the orchestrator expects an encrypted keystore at `~/.oss-orchestrator/secrets.json` unless you override `LOCAL_SECRETS_PATH`. Leaving `LOCAL_SECRETS_PASSPHRASE` empty causes the pod to crash-loop with `LocalFileStore requires LOCAL_SECRETS_PASSPHRASE to be set` until the passphrase is provided.
+With `secrets.backend: localfile`, the orchestrator expects an encrypted keystore at `config/secrets/local/secrets.json` inside the container (override with `LOCAL_SECRETS_PATH`). Leaving `LOCAL_SECRETS_PASSPHRASE` empty causes the pod to crash-loop with `LocalFileStore requires LOCAL_SECRETS_PASSPHRASE to be set` until the passphrase is provided. Use a Kubernetes Secret to project the passphrase and keystore path into `orchestrator.env` for production clusters.
 
 ## 4. Install the chart
 
