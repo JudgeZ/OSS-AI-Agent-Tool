@@ -15,7 +15,10 @@ import (
 
 func main() {
 	mux := http.NewServeMux()
+	startTime := time.Now()
 	gateway.RegisterAuthRoutes(mux)
+	gateway.RegisterHealthRoutes(mux, startTime)
+	gateway.RegisterEventRoutes(mux)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -26,7 +29,7 @@ func main() {
 		Addr:         ":" + port,
 		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
