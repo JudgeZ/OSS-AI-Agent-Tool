@@ -74,7 +74,6 @@ services:
     image: postgres:15-alpine
     security_opt:
       - no-new-privileges:true
-    read_only: true
     environment:
       POSTGRES_USER: ossaat
       POSTGRES_PASSWORD: ossaat
