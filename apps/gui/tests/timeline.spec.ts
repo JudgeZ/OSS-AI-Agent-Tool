@@ -13,6 +13,8 @@ test('timeline renders orchestrator events and captures approval flow', async ({
 
   const approvalModal = page.getByRole('dialog', { name: 'Approval required' });
   await expect(approvalModal).toContainText('Apply workspace edits');
+  await expect(approvalModal).toContainText('src/example.ts');
+  await approvalModal.getByLabel('Rationale (optional)').fill('Ship it');
   await approvalModal.getByRole('button', { name: 'Approve' }).click();
 
   await expect(approvalModal).toBeHidden({ timeout: 5_000 });

@@ -22,7 +22,15 @@ function ensurePlan(planId) {
           action: 'Apply workspace edits',
           capability: 'repo.write',
           summary: 'Proposed changes ready',
-          approval: true
+          approval: true,
+          output: {
+            diff: [
+              {
+                path: 'src/example.ts',
+                patch: ['--- a/src/example.ts', '+++ b/src/example.ts', "@@ -1,3 +1,5 @@", "-console.log('old');", "+console.log('new');"].join('\n')
+              }
+            ]
+          }
         },
         s3: {
           id: 's3',
@@ -80,20 +88,20 @@ function startPlan(planId) {
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s2, state: 'queued', transitioned_at: new Date().toISOString() }
+      step: { ...s2, state: 'queued', transitioned_at: new Date().toISOString(), output: s2.output }
     }),
   baseDelay * 4);
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s2, state: 'running', transitioned_at: new Date().toISOString() }
+      step: { ...s2, state: 'running', transitioned_at: new Date().toISOString(), output: s2.output }
     }),
   baseDelay * 5);
   schedule(planId, () => {
     plan.awaiting = s2.id;
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s2, state: 'waiting_approval', transitioned_at: new Date().toISOString() }
+      step: { ...s2, state: 'waiting_approval', transitioned_at: new Date().toISOString(), output: s2.output }
     });
   }, baseDelay * 6);
 
@@ -180,13 +188,18 @@ const server = http.createServer((req, res) => {
 
       writeEvent(planId, 'plan.step', {
         plan_id: planId,
-        step: { ...plan.steps[stepId], state: 'approved', transitioned_at: new Date().toISOString() }
+        step: { ...plan.steps[stepId], state: 'approved', transitioned_at: new Date().toISOString(), output: plan.steps[stepId].output }
       });
       plan.awaiting = null;
       schedule(planId, () =>
         writeEvent(planId, 'plan.step', {
           plan_id: planId,
-          step: { ...plan.steps[stepId], state: 'completed', transitioned_at: new Date().toISOString() }
+          step: {
+            ...plan.steps[stepId],
+            state: 'completed',
+            transitioned_at: new Date().toISOString(),
+            output: plan.steps[stepId].output
+          }
         }),
       250);
       const s3 = plan.steps.s3;

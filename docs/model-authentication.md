@@ -29,7 +29,7 @@ Some desktop clients (CLI / GUI) use a loopback redirect during OAuth consent. W
 2. The gateway generates a PKCE verifier + challenge, caches them with a random state, and redirects the browser to the provider's authorization page.
 3. After consent, the provider calls back to `GET /auth/:provider/callback?code=...&state=...` on the gateway.
 4. The gateway resolves the saved PKCE verifier, POSTs `{ code, code_verifier, redirect_uri }` to the orchestrator, and, on success, redirects the user to the original `redirect_uri` with `status=success`.
-5. The orchestrator exchanges the code for tokens, encrypts them with the local passphrase (libsodium secretbox), and persists them to disk via `LocalFileStore`.
+5. The orchestrator exchanges the code for tokens, encrypts them with a password-derived key (scrypt + XSalsa20-Poly1305 secretbox), and persists them to disk via the `LocalFileStore` keystore.
 
 ### Configuration
 
@@ -37,3 +37,5 @@ Some desktop clients (CLI / GUI) use a loopback redirect during OAuth consent. W
 - `OAUTH_REDIRECT_BASE`: Public base URL for the gateway callback (defaults to `http://127.0.0.1:8080`).
 - `LOCAL_SECRETS_PASSPHRASE`: Required passphrase for encrypting the local keystore (`~/.oss-orchestrator/secrets.json`).
 - Optional: `LOCAL_SECRETS_PATH` to override the keystore location.
+
+The `LocalFileStore` keystore derives a 256-bit encryption key from the passphrase using scrypt (`N=32768`, `r=8`, `p=1`) and seals secrets with XSalsa20-Poly1305. The same format is shared by the CLI and desktop clients so tokens remain portable across orchestrator restarts.

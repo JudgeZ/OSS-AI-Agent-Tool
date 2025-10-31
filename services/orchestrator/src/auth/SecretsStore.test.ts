@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Agent } from "undici";
@@ -28,6 +28,27 @@ describe("LocalFileStore", () => {
 
     await reloaded.delete("alpha");
     expect(await reloaded.get("alpha")).toBeUndefined();
+  }, 15000);
+
+  test("reads legacy payloads without KDF metadata", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "legacy-keystore-"));
+    const file = path.join(dir, "secrets.json");
+    const passphrase = "test-passphrase";
+
+    const store = new LocalFileStore({ filePath: file, passphrase });
+    await store.set("legacy", "value");
+
+    const raw = await readFile(file, "utf-8");
+    const parsed = JSON.parse(raw) as { salt: string; nonce: string; cipher: string } & Record<string, unknown>;
+    const legacyPayload = {
+      salt: parsed.salt,
+      nonce: parsed.nonce,
+      cipher: parsed.cipher
+    };
+    await writeFile(file, JSON.stringify(legacyPayload, null, 2));
+
+    const reloaded = new LocalFileStore({ filePath: file, passphrase });
+    expect(await reloaded.get("legacy")).toBe("value");
   }, 15000);
 });
 

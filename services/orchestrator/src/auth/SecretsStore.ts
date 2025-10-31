@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Agent, type Dispatcher } from "undici";
-import sodium from "libsodium-wrappers-sumo";
+
+import { LocalKeystore } from "./LocalKeystore.js";
 
 export interface SecretsStore {
   get(key: string): Promise<string | undefined>;
@@ -16,25 +16,19 @@ type LocalStoreOptions = {
   passphrase?: string;
 };
 
-type PersistedPayload = {
-  version: number;
-  salt: string;
-  nonce: string;
-  cipher: string;
-};
-
 export class LocalFileStore implements SecretsStore {
   private cache: Map<string, string> = new Map();
   private ready: Promise<void>;
   private readonly filePath: string;
   private readonly passphrase: string;
-  private salt?: Uint8Array;
   private persistChain: Promise<void> = Promise.resolve();
+  private readonly keystore: LocalKeystore;
 
   constructor(options?: LocalStoreOptions) {
     const defaultPath = path.join(homedir(), ".oss-orchestrator", "secrets.json");
     this.filePath = options?.filePath ?? process.env.LOCAL_SECRETS_PATH ?? defaultPath;
     this.passphrase = options?.passphrase ?? process.env.LOCAL_SECRETS_PASSPHRASE ?? "";
+    this.keystore = new LocalKeystore(this.filePath, this.passphrase);
     this.ready = this.initialize();
   }
 
@@ -56,54 +50,11 @@ export class LocalFileStore implements SecretsStore {
   }
 
   private async initialize() {
-    await sodium.ready;
     if (!this.passphrase) {
       throw new Error("LocalFileStore requires LOCAL_SECRETS_PASSPHRASE to be set");
     }
-    await this.loadFromDisk();
-  }
-
-  private async loadFromDisk() {
-    try {
-      const raw = await fs.readFile(this.filePath, "utf-8");
-      const payload = JSON.parse(raw) as PersistedPayload;
-      if (!payload.salt || !payload.nonce || !payload.cipher) {
-        this.cache.clear();
-        return;
-      }
-      const salt = sodium.from_base64(payload.salt, sodium.base64_variants.ORIGINAL);
-      const key = this.deriveKey(salt);
-      const nonce = sodium.from_base64(payload.nonce, sodium.base64_variants.ORIGINAL);
-      const cipher = sodium.from_base64(payload.cipher, sodium.base64_variants.ORIGINAL);
-      const decrypted = sodium.crypto_secretbox_open_easy(cipher, nonce, key);
-      if (!decrypted) {
-        this.cache.clear();
-        this.salt = salt;
-        return;
-      }
-      const plaintext = sodium.to_string(decrypted);
-      const parsed = JSON.parse(plaintext) as Record<string, string>;
-      this.cache = new Map(Object.entries(parsed));
-      this.salt = salt;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
-        this.cache = new Map();
-        this.salt = undefined;
-        return;
-      }
-      throw error;
-    }
-  }
-
-  private deriveKey(salt: Uint8Array) {
-    return sodium.crypto_pwhash(
-      sodium.crypto_secretbox_KEYBYTES,
-      this.passphrase,
-      salt,
-      sodium.crypto_pwhash_OPSLIMIT_MODERATE,
-      sodium.crypto_pwhash_MEMLIMIT_MODERATE,
-      sodium.crypto_pwhash_ALG_DEFAULT
-    );
+    const existing = await this.keystore.read();
+    this.cache = new Map(Object.entries(existing));
   }
 
   private enqueuePersist(): Promise<void> {
@@ -114,20 +65,7 @@ export class LocalFileStore implements SecretsStore {
 
   private async persist() {
     const entries = Object.fromEntries(this.cache.entries());
-    const plaintext = JSON.stringify(entries);
-    const salt = this.salt ?? sodium.randombytes_buf(16);
-    this.salt = salt;
-    const key = this.deriveKey(salt);
-    const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
-    const cipher = sodium.crypto_secretbox_easy(sodium.from_string(plaintext), nonce, key);
-    const payload: PersistedPayload = {
-      version: 1,
-      salt: sodium.to_base64(salt, sodium.base64_variants.ORIGINAL),
-      nonce: sodium.to_base64(nonce, sodium.base64_variants.ORIGINAL),
-      cipher: sodium.to_base64(cipher, sodium.base64_variants.ORIGINAL)
-    };
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(payload), { mode: 0o600 });
+    await this.keystore.write(entries);
   }
 }
 

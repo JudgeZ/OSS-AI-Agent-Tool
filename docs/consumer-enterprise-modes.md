@@ -29,3 +29,4 @@ Set `RUN_MODE=consumer|enterprise`. Behavior differences:
 - **Completions**: downstream agents send status updates to the `plan.completions` queue; orchestrator acks, updates SSE history, and tracks dead-letter counts.
 - **Metrics**: Prometheus gauge `orchestrator_queue_depth{queue=...}` reflects backlog; counter `orchestrator_queue_retries_total{queue=...}` increments on retries to surface saturation/poison-pill patterns.
 - **Dead letters**: failures can be routed to `<queue>.dead` for operator triage; set `x-dead-letter-reason` header to annotate cause.
+- **Crash resilience**: the plan runtime snapshots in-flight steps to a local keystore so restarts replay the latest `running`/`waiting_approval` state and re-emit SSE history without losing queue progress.

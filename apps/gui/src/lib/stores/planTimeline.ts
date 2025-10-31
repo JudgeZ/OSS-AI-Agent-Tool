@@ -14,6 +14,16 @@ export interface StepHistoryEntry {
   state: StepState;
   at: string;
   summary?: string;
+  output?: Record<string, unknown>;
+}
+
+export interface DiffFile {
+  path: string;
+  patch: string;
+}
+
+export interface DiffPayload {
+  files: DiffFile[];
 }
 
 export interface PlanStep {
@@ -28,6 +38,8 @@ export interface PlanStep {
   summary?: string;
   approvalRequired: boolean;
   history: StepHistoryEntry[];
+  latestOutput?: Record<string, unknown>;
+  diff?: DiffPayload;
 }
 
 export interface TimelineState {
@@ -65,6 +77,7 @@ interface StepEventPayload {
     timeoutSeconds?: number;
     timeout_seconds?: number;
     transitioned_at?: string;
+    output?: Record<string, unknown>;
   };
 }
 
@@ -72,7 +85,48 @@ let eventSource: EventSource | null = null;
 
 function toHistoryEntry(step: StepEventPayload['step']): StepHistoryEntry {
   const at = step.transitioned_at ?? new Date().toISOString();
-  return { state: step.state, at, summary: step.summary };
+  return { state: step.state, at, summary: step.summary, output: step.output };
+}
+
+function toDiffPayload(output: Record<string, unknown> | undefined): DiffPayload | undefined {
+  if (!output) return undefined;
+  const candidate = (output as { diff?: unknown }).diff;
+  if (!candidate) return undefined;
+
+  if (typeof candidate === 'string') {
+    return { files: [{ path: 'changes', patch: candidate }] };
+  }
+
+  if (Array.isArray(candidate)) {
+    const files = candidate
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const path = typeof (entry as { path?: unknown }).path === 'string' ? (entry as { path: string }).path : 'changes';
+        const patch = typeof (entry as { patch?: unknown }).patch === 'string' ? (entry as { patch: string }).patch : null;
+        if (!patch) return null;
+        return { path, patch };
+      })
+      .filter((file): file is DiffFile => file !== null);
+    return files.length > 0 ? { files } : undefined;
+  }
+
+  if (typeof candidate === 'object') {
+    const filesField = (candidate as { files?: unknown }).files;
+    if (Array.isArray(filesField)) {
+      const files = filesField
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const path = typeof (entry as { path?: unknown }).path === 'string' ? (entry as { path: string }).path : 'changes';
+          const patch = typeof (entry as { patch?: unknown }).patch === 'string' ? (entry as { patch: string }).patch : null;
+          if (!patch) return null;
+          return { path, patch };
+        })
+        .filter((file): file is DiffFile => file !== null);
+      return files.length > 0 ? { files } : undefined;
+    }
+  }
+
+  return undefined;
 }
 
 function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineState {
@@ -88,6 +142,7 @@ function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineSt
       : undefined;
 
   if (existingIndex === -1) {
+    const latestOutput = payload.step.output;
     steps.push({
       id: payload.step.id,
       action: payload.step.action ?? payload.step.id,
@@ -99,12 +154,16 @@ function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineSt
       state: payload.step.state,
       summary: payload.step.summary,
       approvalRequired,
-      history: [historyEntry]
+      history: [historyEntry],
+      latestOutput,
+      diff: toDiffPayload(latestOutput)
     });
   } else {
     const existing = steps[existingIndex];
     const alreadyLogged = existing.history.some((entry) => entry.state === historyEntry.state && entry.at === historyEntry.at);
     const history = alreadyLogged ? existing.history : [...existing.history, historyEntry];
+    const latestOutput = payload.step.output ?? existing.latestOutput;
+    const diff = payload.step.output ? toDiffPayload(payload.step.output) ?? existing.diff : existing.diff;
     steps[existingIndex] = {
       ...existing,
       action: payload.step.action ?? existing.action,
@@ -116,7 +175,9 @@ function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineSt
       state: payload.step.state,
       summary: payload.step.summary ?? existing.summary,
       approvalRequired: approvalRequired || existing.approvalRequired,
-      history
+      history,
+      latestOutput,
+      diff
     };
   }
 
@@ -209,4 +270,4 @@ export const timeline = {
   submitApproval
 };
 
-export type { PlanStep, StepHistoryEntry, StepState, TimelineState };
+export type { DiffPayload, DiffFile, PlanStep, StepHistoryEntry, StepState, TimelineState };

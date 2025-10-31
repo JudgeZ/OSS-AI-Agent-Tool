@@ -12,7 +12,11 @@ import {
 } from "./plan/events.js";
 import { routeChat } from "./providers/ProviderRegistry.js";
 import { withSpan } from "./observability/tracing.js";
-import { initializePlanQueueRuntime, submitPlanSteps } from "./queue/PlanQueueRuntime.js";
+import {
+  initializePlanQueueRuntime,
+  persistPlanStepState,
+  submitPlanSteps
+} from "./queue/PlanQueueRuntime.js";
 import { authorize as oauthAuthorize, callback as oauthCallback } from "./auth/OAuthController.js";
 
 initializePlanQueueRuntime().catch(error => {
@@ -103,7 +107,7 @@ export function createServer(): Express {
     }
   });
 
-  app.post("/plan/:planId/steps/:stepId/approve", (req: Request, res: Response) => {
+  app.post("/plan/:planId/steps/:stepId/approve", async (req: Request, res: Response, next: NextFunction) => {
     const { planId, stepId } = req.params;
     const latest = getLatestPlanStepEvent(planId, stepId);
     if (!latest) {
@@ -120,18 +124,23 @@ export function createServer(): Express {
     const rationale = typeof req.body?.rationale === "string" ? req.body.rationale.trim() : "";
     const summary = rationale ? `${latest.step.summary ?? ""}${latest.step.summary ? " " : ""}(${decision}: ${rationale})` : latest.step.summary;
 
-    publishPlanStepEvent({
-      event: "plan.step",
-      traceId: latest.traceId,
-      planId,
-      step: {
-        ...latest.step,
-        state: decision,
-        summary
-      }
-    });
+    try {
+      await persistPlanStepState(planId, stepId, decision, summary);
+      publishPlanStepEvent({
+        event: "plan.step",
+        traceId: latest.traceId,
+        planId,
+        step: {
+          ...latest.step,
+          state: decision,
+          summary
+        }
+      });
 
-    res.status(204).end();
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post("/chat", async (req: Request, res: Response, next: NextFunction) => {
