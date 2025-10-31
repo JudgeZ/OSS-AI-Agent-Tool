@@ -1,6 +1,6 @@
 # Docker Quickstart
 
-Use Docker Compose to run the OSS AI Agent Tool locally with RabbitMQ, Postgres, Redis, Jaeger, and Langfuse. This setup mirrors the **consumer** run mode and is ideal for agent template development, provider integration testing, and end-to-end demos.
+Use Docker Compose to run the OSS AI Agent Tool's application containers locally. The provided stack spins up development environments for the orchestrator (Node.js) and gateway API (Go) so you can iterate on agents, flows, and HTTP surfaces without installing toolchains on the host. External dependencies (RabbitMQ, Redis, Postgres, Jaeger, Langfuse, etc.) are **not** included—point the services to managed instances or run them separately when you need end-to-end flows.
 
 ## Prerequisites
 
@@ -37,19 +37,26 @@ secrets:
 docker compose -f compose.dev.yaml up --build
 ```
 
-This command launches the following containers:
+This command launches two containers:
 
-| Service | Image | Purpose |
+| Service | Base image | Purpose |
 | --- | --- | --- |
-| `gateway-api` | Go binary | OAuth loopback endpoints, SSE proxy |
-| `orchestrator` | Node.js | Plan execution and agent routing |
-| `indexer` | Rust skeleton | Placeholder for future symbolic index |
-| `memory-svc` | Node.js | Cache/state glue for agents |
-| `rabbitmq` | Official RabbitMQ | Message bus for the outer loop |
-| `redis` | Redis | Tool/cache storage |
-| `postgres` | Postgres | Plan and audit storage |
-| `jaeger` | Jaeger all-in-one | Trace viewer |
-| `langfuse` | Langfuse | LLM tracing and prompt analytics |
+| `orchestrator` | `node:20-alpine` | Development shell for the orchestrator service |
+| `gateway` | `golang:1.22-alpine` | Development shell for the gateway API |
+
+Both containers mount the repository at `/workspace` and default to an idle `tail -f /dev/null` command so you can exec into them and run your preferred dev workflow. Start the processes you need from separate terminals, for example:
+
+```bash
+# Install dependencies (once per container)
+docker compose -f compose.dev.yaml exec orchestrator npm install
+docker compose -f compose.dev.yaml exec gateway go mod download
+
+# Run the services
+docker compose -f compose.dev.yaml exec orchestrator npm run dev --workspace services/orchestrator
+docker compose -f compose.dev.yaml exec gateway go run ./apps/gateway-api
+```
+
+> **Note:** When you require message queues, databases, or observability backends, run them locally via separate containers (e.g., `docker run rabbitmq:3-management`) or connect to shared development infrastructure.
 
 ### Common flags
 
@@ -58,10 +65,10 @@ This command launches the following containers:
 
 ## 3. Verify services
 
+Once the orchestrator and gateway processes are running inside their containers, verify the local endpoints:
+
 * Gateway health: <http://localhost:8080/healthz>
 * Orchestrator plan endpoint: <http://localhost:3000/plan>
-* Jaeger UI: <http://localhost:16686>
-* Langfuse UI: <http://localhost:3001>
 
 Use the CLI to generate a plan and agent skeleton:
 

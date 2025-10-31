@@ -13,7 +13,7 @@ Deploy the OSS AI Agent Tool to Kubernetes using the bundled Helm chart. This gu
 
 ## 1. Build and push container images
 
-Use the provided GitHub Actions workflow (`release-images.yml`) on a tag, or build locally:
+Use the provided GitHub Actions workflow (`release-images.yml`) on a tag, or build locally with `docker buildx`:
 
 ```bash
 # Option A: run via GitHub Actions
@@ -21,8 +21,28 @@ git tag v0.3.0
 git push origin v0.3.0
 
 # Option B: local build & push
-make build
-make push REGISTRY=ghcr.io/<owner>/oss-ai-agent-tool
+export REGISTRY=ghcr.io/<owner>/oss-ai-agent-tool
+export VERSION=dev
+
+docker login ghcr.io -u <github-username> -p <token>
+
+# Build and push the gateway API image
+docker buildx build \
+  --platform linux/amd64 \
+  --tag "$REGISTRY/gateway-api:$VERSION" \
+  --file apps/gateway-api/Dockerfile \
+  apps/gateway-api \
+  --push
+
+# Build and push the orchestrator image
+docker buildx build \
+  --platform linux/amd64 \
+  --tag "$REGISTRY/orchestrator:$VERSION" \
+  --file services/orchestrator/Dockerfile \
+  services/orchestrator \
+  --push
+
+# Repeat for additional services (indexer, memory-svc) once their Dockerfiles are available
 ```
 
 Images are published under `ghcr.io/<owner>/oss-ai-agent-tool/<service>` and signed with cosign when built by CI. See [CI/CD](./ci-cd.md) for automation details.
