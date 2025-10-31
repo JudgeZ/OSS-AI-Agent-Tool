@@ -1,4 +1,4 @@
-package main
+package gateway
 
 import (
 	"bytes"
@@ -358,4 +358,30 @@ func isRequestSecure(r *http.Request) bool {
 		return strings.EqualFold(proto, "https")
 	}
 	return false
+}
+
+func RegisterAuthRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/auth/", func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/authorize"):
+			if r.Method != http.MethodGet {
+				methodNotAllowed(w, http.MethodGet)
+				return
+			}
+			authorizeHandler(w, r)
+		case strings.HasSuffix(r.URL.Path, "/callback"):
+			if r.Method != http.MethodGet {
+				methodNotAllowed(w, http.MethodGet)
+				return
+			}
+			callbackHandler(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+func methodNotAllowed(w http.ResponseWriter, allowed string) {
+	w.Header().Set("Allow", allowed)
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
