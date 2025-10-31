@@ -71,6 +71,9 @@ jobs:
           - name: cli
             path: apps/cli
             node: '20'
+          - name: memory-svc
+            path: services/memory-svc
+            node: '20'
     defaults:
       run:
         working-directory: ${{ matrix.project.path }}
