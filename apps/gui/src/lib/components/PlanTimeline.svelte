@@ -1,6 +1,7 @@
 <script lang="ts">
   import { timeline } from '$lib/stores/planTimeline';
   import ApprovalModal from './ApprovalModal.svelte';
+  import DiffViewer from './DiffViewer.svelte';
   import type { PlanStep } from '$lib/stores/planTimeline';
   import { derived } from 'svelte/store';
 
@@ -13,6 +14,33 @@
   }));
 
   const formatTime = (iso: string) => new Date(iso).toLocaleTimeString();
+
+  type EgressDescriptor = { target: string; method?: string; reason?: string };
+
+  const getEgressRequests = (step: PlanStep): EgressDescriptor[] => {
+    const output = step.latestOutput;
+    if (!output) return [];
+    const candidates =
+      (output.egress_requests ?? output.egressRequests ?? output.requests ?? output.destinations) as unknown;
+    if (!Array.isArray(candidates)) {
+      return [];
+    }
+    return candidates
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const url =
+          typeof (entry as { url?: unknown }).url === 'string'
+            ? (entry as { url: string }).url
+            : typeof (entry as { host?: unknown }).host === 'string'
+            ? (entry as { host: string }).host
+            : undefined;
+        if (!url) return null;
+        const method = typeof (entry as { method?: unknown }).method === 'string' ? (entry as { method: string }).method : undefined;
+        const reason = typeof (entry as { reason?: unknown }).reason === 'string' ? (entry as { reason: string }).reason : undefined;
+        return { target: url, method, reason } satisfies EgressDescriptor;
+      })
+      .filter((value): value is EgressDescriptor => value !== null);
+  };
 
   const submitDecision = async (decision: 'approve' | 'reject', rationale?: string) => {
     try {
@@ -70,6 +98,27 @@
         {#if step.summary}
           <p class="summary">{step.summary}</p>
         {/if}
+        {#if step.diff && step.capability.startsWith('repo.write')}
+          <DiffViewer diff={step.diff} />
+        {/if}
+        {#if step.capability.startsWith('network.egress') && getEgressRequests(step).length > 0}
+          <section class="egress">
+            <h3>Requested destinations</h3>
+            <ul>
+              {#each getEgressRequests(step) as request}
+                <li>
+                  <span class="egress__target">{request.target}</span>
+                  {#if request.method}
+                    <span class="egress__method">{request.method}</span>
+                  {/if}
+                  {#if request.reason}
+                    <span class="egress__reason">{request.reason}</span>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
         <ul class="history">
           {#each step.history as entry, index (entry.state + index)}
             <li>
@@ -91,8 +140,8 @@
     submitting={$timelineState.approvalSubmitting}
     error={$timelineState.approvalError}
     step={$awaitingApproval as PlanStep}
-    on:approve={() => submitDecision('approve')}
-    on:reject={() => submitDecision('reject')}
+    on:approve={(event) => submitDecision('approve', event.detail?.rationale)}
+    on:reject={(event) => submitDecision('reject', event.detail?.rationale)}
   />
 {/if}
 
@@ -277,5 +326,56 @@
 
   .history__summary {
     color: #cbd5f5;
+  }
+
+  .egress {
+    margin: 0.75rem 0 0;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(15, 23, 42, 0.65);
+  }
+
+  .egress h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #e2e8f0;
+  }
+
+  .egress ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .egress li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+
+  .egress__target {
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+      monospace;
+    font-size: 0.8rem;
+  }
+
+  .egress__method {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    background: rgba(94, 234, 212, 0.15);
+    color: #5eead4;
+    padding: 0.2rem 0.4rem;
+    border-radius: 999px;
+  }
+
+  .egress__reason {
+    color: #cbd5f5;
+    font-size: 0.75rem;
   }
 </style>

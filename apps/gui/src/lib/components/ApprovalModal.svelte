@@ -1,17 +1,48 @@
 <script lang="ts">
   import type { PlanStep } from '$lib/stores/planTimeline';
   import { createEventDispatcher } from 'svelte';
+  import DiffViewer from './DiffViewer.svelte';
+
   export let step: PlanStep;
   export let submitting: boolean;
   export let error: string | null;
-  const dispatch = createEventDispatcher();
+
+  const dispatch = createEventDispatcher<{ approve: { rationale?: string }; reject: { rationale?: string } }>();
+  let rationale = '';
+
+  $: diffVisible = step.capability.startsWith('repo.write') && Boolean(step.diff);
+  $: egressRequests = extractEgress(step);
+  $: egressVisible = step.capability.startsWith('network.egress') && egressRequests.length > 0;
+
+  function extractEgress(target: PlanStep) {
+    const output = target.latestOutput;
+    if (!output) return [];
+    const raw =
+      (output.egress_requests ?? output.egressRequests ?? output.requests ?? output.destinations) as unknown;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const url =
+          typeof (entry as { url?: unknown }).url === 'string'
+            ? (entry as { url: string }).url
+            : typeof (entry as { host?: unknown }).host === 'string'
+            ? (entry as { host: string }).host
+            : undefined;
+        if (!url) return null;
+        const method = typeof (entry as { method?: unknown }).method === 'string' ? (entry as { method: string }).method : undefined;
+        const reason = typeof (entry as { reason?: unknown }).reason === 'string' ? (entry as { reason: string }).reason : undefined;
+        return { url, method, reason };
+      })
+      .filter((value): value is { url: string; method?: string; reason?: string } => value !== null);
+  }
 
   const onApprove = () => {
-    dispatch('approve');
+    dispatch('approve', { rationale: rationale.trim() || undefined });
   };
 
   const onReject = () => {
-    dispatch('reject');
+    dispatch('reject', { rationale: rationale.trim() || undefined });
   };
 </script>
 
@@ -42,6 +73,39 @@
     {#if error}
       <p class="modal__error">{error}</p>
     {/if}
+    {#if diffVisible && step.diff}
+      <section class="modal__section">
+        <h3>Pending diff</h3>
+        <DiffViewer diff={step.diff} />
+      </section>
+    {/if}
+    {#if egressVisible}
+      <section class="modal__section">
+        <h3>Planned network requests</h3>
+        <ul class="egress-list">
+          {#each egressRequests as request}
+            <li>
+              <span class="egress-list__target">{request.url}</span>
+              {#if request.method}
+                <span class="egress-list__method">{request.method}</span>
+              {/if}
+              {#if request.reason}
+                <span class="egress-list__reason">{request.reason}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+    <label class="modal__rationale">
+      <span>Rationale (optional)</span>
+      <textarea
+        rows="3"
+        bind:value={rationale}
+        placeholder="Leave a note about this decision"
+        disabled={submitting}
+      ></textarea>
+    </label>
     <footer class="modal__actions">
       <button class="reject" on:click={onReject} disabled={submitting}>Reject</button>
       <button class="approve" on:click={onApprove} disabled={submitting}>
@@ -63,7 +127,7 @@
   }
 
   .modal {
-    width: min(420px, 90vw);
+    width: min(480px, 92vw);
     background: rgba(15, 23, 42, 0.95);
     border-radius: 1rem;
     padding: 1.5rem;
@@ -100,6 +164,35 @@
     font-weight: 600;
   }
 
+  .modal__section {
+    margin: 1rem 0;
+  }
+
+  .modal__section h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #cbd5f5;
+  }
+
+  .modal__rationale {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 1.25rem 0;
+    font-size: 0.85rem;
+  }
+
+  .modal__rationale textarea {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    color: inherit;
+    resize: vertical;
+  }
+
   .modal__actions {
     display: flex;
     justify-content: flex-end;
@@ -132,5 +225,38 @@
   .modal__error {
     margin: 0 0 1rem;
     color: #fca5a5;
+  }
+
+  .egress-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .egress-list li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+  }
+
+  .egress-list__target {
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+      monospace;
+  }
+
+  .egress-list__method {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    background: rgba(94, 234, 212, 0.15);
+    color: #5eead4;
+    padding: 0.2rem 0.4rem;
+    border-radius: 999px;
+  }
+
+  .egress-list__reason {
+    color: #cbd5f5;
   }
 </style>

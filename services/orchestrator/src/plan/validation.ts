@@ -51,7 +51,8 @@ export const PlanStepEventSchema = z.object({
     tool: z.string().min(1),
     timeoutSeconds: z.number().int().nonnegative(),
     approvalRequired: z.boolean(),
-    summary: z.string().optional()
+    summary: z.string().optional(),
+    output: z.record(z.any()).optional()
   })
 });
 

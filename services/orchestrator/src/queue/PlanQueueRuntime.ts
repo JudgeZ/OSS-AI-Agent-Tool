@@ -6,6 +6,7 @@ import type { Plan, PlanStep } from "../plan/planner.js";
 import { getToolAgentClient, resetToolAgentClient, ToolClientError } from "../grpc/AgentClient.js";
 import type { ToolEvent } from "../plan/validation.js";
 import { getQueueAdapter } from "./QueueAdapter.js";
+import { createPlanStateStore, type PlanStateStore } from "./PlanStateStore.js";
 
 export const PLAN_STEPS_QUEUE = "plan.steps";
 export const PLAN_COMPLETIONS_QUEUE = "plan.completions";
@@ -32,16 +33,18 @@ export type PlanStepCompletionPayload = {
 };
 
 const stepRegistry = new Map<string, { step: PlanStep; traceId: string }>();
+let planStateStore: PlanStateStore | null = createPlanStateStore();
 let initialized: Promise<void> | null = null;
 
 const TERMINAL_STATES = new Set<ToolEvent["state"]>(["completed", "failed"]);
 
-function emitPlanEvent(
+async function emitPlanEvent(
   planId: string,
   step: PlanStep,
   traceId: string,
-  update: Partial<ToolEvent> & { state: ToolEvent["state"]; summary?: string }
-): void {
+  update: Partial<ToolEvent> & { state: ToolEvent["state"]; summary?: string; output?: Record<string, unknown> }
+): Promise<void> {
+  await planStateStore?.setState(planId, step.id, update.state, update.summary, update.output);
   publishPlanStepEvent({
     event: "plan.step",
     traceId,
@@ -57,24 +60,26 @@ function emitPlanEvent(
       labels: step.labels,
       timeoutSeconds: step.timeoutSeconds,
       approvalRequired: step.approvalRequired,
-      summary: update.summary ?? undefined
+      summary: update.summary ?? undefined,
+      output: update.output as Record<string, unknown> | undefined
     }
   });
 }
 
-function publishToolEvents(planId: string, baseStep: PlanStep, traceId: string, events: ToolEvent[]): void {
+async function publishToolEvents(planId: string, baseStep: PlanStep, traceId: string, events: ToolEvent[]): Promise<void> {
   for (const event of events) {
-    emitPlanEvent(planId, baseStep, traceId, {
+    await emitPlanEvent(planId, baseStep, traceId, {
       state: event.state,
       summary: event.summary,
-      occurredAt: event.occurredAt
+      occurredAt: event.occurredAt,
+      output: event.output as Record<string, unknown> | undefined
     });
   }
 }
 
 export async function initializePlanQueueRuntime(): Promise<void> {
   if (!initialized) {
-    initialized = Promise.all([setupStepConsumer(), setupCompletionConsumer()])
+    initialized = Promise.all([setupStepConsumer(), setupCompletionConsumer(), rehydratePendingSteps()])
       .then(() => undefined)
       .catch(error => {
         initialized = null;
@@ -88,6 +93,7 @@ export function resetPlanQueueRuntime(): void {
   initialized = null;
   stepRegistry.clear();
   resetToolAgentClient();
+  planStateStore = createPlanStateStore();
 }
 
 export async function submitPlanSteps(plan: Plan, traceId: string): Promise<void> {
@@ -97,6 +103,11 @@ export async function submitPlanSteps(plan: Plan, traceId: string): Promise<void
   const submissions = plan.steps.map(async step => {
     const key = `${plan.id}:${step.id}`;
     stepRegistry.set(key, { step, traceId });
+    await planStateStore?.rememberStep(plan.id, step, traceId);
+    await emitPlanEvent(plan.id, step, traceId, {
+      state: "queued",
+      summary: "Queued for execution"
+    });
     await adapter.enqueue<PlanStepTaskPayload>(PLAN_STEPS_QUEUE, { planId: plan.id, step, traceId }, {
       idempotencyKey: key,
       headers: { "trace-id": traceId }
@@ -123,6 +134,7 @@ async function setupCompletionConsumer(): Promise<void> {
       message.headers["Trace-Id"] ||
       "";
 
+    await planStateStore?.setState(payload.planId, payload.stepId, payload.state, payload.summary);
     publishPlanStepEvent({
       event: "plan.step",
       traceId: traceId || message.id,
@@ -144,6 +156,7 @@ async function setupCompletionConsumer(): Promise<void> {
 
     if (payload.state === "completed" || payload.state === "failed") {
       stepRegistry.delete(key);
+      await planStateStore?.forgetStep(payload.planId, payload.stepId);
     }
 
     await message.ack();
@@ -159,7 +172,7 @@ async function setupStepConsumer(): Promise<void> {
     const traceId = payload.traceId || message.headers["trace-id"] || message.id;
     const invocationId = randomUUID();
 
-    emitPlanEvent(planId, step, traceId, { state: "running", summary: "Dispatching tool agent" });
+    await emitPlanEvent(planId, step, traceId, { state: "running", summary: "Dispatching tool agent" });
 
     try {
       const client = getToolAgentClient();
@@ -184,13 +197,14 @@ async function setupStepConsumer(): Promise<void> {
       );
 
       if (events.length > 0) {
-        publishToolEvents(planId, step, traceId, events);
+        await publishToolEvents(planId, step, traceId, events);
       } else {
-        emitPlanEvent(planId, step, traceId, { state: "completed", summary: "Tool completed" });
+        await emitPlanEvent(planId, step, traceId, { state: "completed", summary: "Tool completed" });
       }
 
       if (events.some(event => TERMINAL_STATES.has(event.state))) {
         stepRegistry.delete(`${planId}:${step.id}`);
+        await planStateStore?.forgetStep(planId, step.id);
       }
 
       await message.ack();
@@ -204,14 +218,45 @@ async function setupStepConsumer(): Promise<void> {
             });
 
       if (toolError.retryable) {
-        emitPlanEvent(planId, step, traceId, { state: "running", summary: `Retry scheduled: ${toolError.message}` });
+        await emitPlanEvent(planId, step, traceId, { state: "running", summary: `Retry scheduled: ${toolError.message}` });
         await message.retry();
         return;
       }
 
-      emitPlanEvent(planId, step, traceId, { state: "failed", summary: toolError.message });
+      await emitPlanEvent(planId, step, traceId, { state: "failed", summary: toolError.message });
       stepRegistry.delete(`${planId}:${step.id}`);
+      await planStateStore?.forgetStep(planId, step.id);
       await message.ack();
     }
   });
+}
+
+async function rehydratePendingSteps(): Promise<void> {
+  const pending = await planStateStore?.listActiveSteps();
+  if (!pending) {
+    return;
+  }
+  for (const entry of pending) {
+    const key = `${entry.planId}:${entry.stepId}`;
+    stepRegistry.set(key, { step: entry.step, traceId: entry.traceId });
+    publishPlanStepEvent({
+      event: "plan.step",
+      traceId: entry.traceId,
+      planId: entry.planId,
+      occurredAt: entry.updatedAt,
+      step: {
+        id: entry.stepId,
+        action: entry.step.action,
+        tool: entry.step.tool,
+        state: entry.state,
+        capability: entry.step.capability,
+        capabilityLabel: entry.step.capabilityLabel,
+        labels: entry.step.labels,
+        timeoutSeconds: entry.step.timeoutSeconds,
+        approvalRequired: entry.step.approvalRequired,
+        summary: entry.summary,
+        output: entry.output as Record<string, unknown> | undefined
+      }
+    });
+  }
 }
