@@ -19,6 +19,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gitleaks:
+    name: Gitleaks secret scan
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan for secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --redact --verbose
+
   trivy-fs:
     name: Trivy filesystem scan
     runs-on: ubuntu-latest
@@ -81,6 +94,22 @@ jobs:
           exit-code: '1'
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
+
+  trivy-config:
+    name: Trivy config scan (Helm)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan Helm chart configuration
+        uses: aquasecurity/trivy-action@0.25.0
+        with:
+          scan-type: config
+          scan-ref: charts/oss-ai-agent-tool
+          format: table
+          exit-code: '1'
 
   semgrep:
     name: Semgrep SAST
