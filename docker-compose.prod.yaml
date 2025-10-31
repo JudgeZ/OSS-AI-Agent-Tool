@@ -7,6 +7,9 @@ x-image: &image
 services:
   gateway:
     image: "${REGISTRY:-ghcr.io/yourorg/oss-ai-agent-tool}/gateway-api:${TAG:-latest}"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       PORT: "8080"
       ORCHESTRATOR_URL: http://orchestrator:4000
@@ -20,6 +23,9 @@ services:
 
   orchestrator:
     image: "${REGISTRY:-ghcr.io/yourorg/oss-ai-agent-tool}/orchestrator:${TAG:-latest}"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       NODE_ENV: production
       PORT: "4000"
@@ -45,6 +51,9 @@ services:
 
   indexer:
     image: "${REGISTRY:-ghcr.io/yourorg/oss-ai-agent-tool}/indexer:${TAG:-latest}"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       RUST_LOG: info
     ports:
@@ -53,6 +62,9 @@ services:
 
   redis:
     image: redis/redis-stack-server:7.2.0-v9
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -64,6 +76,8 @@ services:
 
   postgres:
     image: postgres:15-alpine
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_USER: ossaat
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ossaat}
@@ -79,6 +93,8 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
+    security_opt:
+      - no-new-privileges:true
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -90,6 +106,8 @@ services:
 
   kafka:
     image: bitnami/kafka:3.7.0
+    security_opt:
+      - no-new-privileges:true
     environment:
       KAFKA_ENABLE_KRAFT: "yes"
       KAFKA_CFG_NODE_ID: "1"
@@ -107,6 +125,8 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:1.57
+    security_opt:
+      - no-new-privileges:true
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
@@ -115,6 +135,8 @@ services:
 
   langfuse:
     image: langfuse/langfuse:2.14.1
+    security_opt:
+      - no-new-privileges:true
     environment:
       DATABASE_URL: postgres://ossaat:${POSTGRES_PASSWORD:-ossaat}@postgres:5432/ossaat
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-replace-me}
