@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+  gateway:
+    image: "${IMAGE_PREFIX:-ghcr.io/your-github-username/oss-ai-agent-tool}/gateway-api:${IMAGE_TAG:-latest}"
+    environment:
+      PORT: "8080"
+      ORCHESTRATOR_URL: http://orchestrator:4000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - orchestrator
+
+  orchestrator:
+    image: "${IMAGE_PREFIX:-ghcr.io/your-github-username/oss-ai-agent-tool}/orchestrator:${IMAGE_TAG:-latest}"
+    environment:
+      PORT: "4000"
+      MEMORY_SVC_URL: http://memory-svc:8081
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      POSTGRES_DSN: postgres://ossaat:ossaat@postgres:5432/ossaat?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "4000:4000"
+    depends_on:
+      - memory-svc
+      - redis
+      - postgres
+      - rabbitmq
+
+  memory-svc:
+    build:
+      context: ./services/memory-svc
+    image: "${IMAGE_PREFIX:-ghcr.io/your-github-username/oss-ai-agent-tool}/memory-svc:${IMAGE_TAG:-latest}"
+    environment:
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+
+  indexer:
+    image: "${IMAGE_PREFIX:-ghcr.io/your-github-username/oss-ai-agent-tool}/indexer:${IMAGE_TAG:-latest}"
+    depends_on:
+      - orchestrator
+
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ossaat
+      POSTGRES_PASSWORD: ossaat
+      POSTGRES_DB: ossaat
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    profiles: ["rabbitmq", "default"]
+
+  kafka:
+    image: bitnami/kafka:3.7
+    environment:
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: broker,controller
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    ports:
+      - "9092:9092"
+    profiles: ["kafka"]
+
+volumes:
+  pgdata:

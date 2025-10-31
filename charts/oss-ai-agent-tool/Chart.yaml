@@ -1,0 +1,10 @@
+apiVersion: v2
+name: oss-ai-agent-tool
+description: Helm chart for deploying the OSS AI Agent Tool orchestrator, gateway, and supporting services.
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+home: https://github.com/oss-ai-agent-tool/OSS-AI-Agent-Tool
+maintainers:
+  - name: OSS AI Agent Tool Maintainers
+    email: maintainers@oss-ai-agent-tool.dev

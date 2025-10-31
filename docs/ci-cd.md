@@ -23,6 +23,28 @@ The repository ships with **four GitHub Actions workflows** that cover build/tes
   3. Performs **keyless cosign signing** using GitHub OIDC (`id-token: write` permission — no secrets required).
   4. Uploads the SBOM to the GitHub Release and retains it as an artifact.
 
+### Local image helpers
+
+The repository ships with a top-level `Makefile` that mirrors the CI release flow:
+
+```bash
+# Build all deployable images (gateway, orchestrator, indexer)
+make build TAG=dev IMAGE_PREFIX=ghcr.io/<owner>/oss-ai-agent-tool
+
+# Push the locally built tags to GHCR (requires docker login)
+make push TAG=dev IMAGE_PREFIX=ghcr.io/<owner>/oss-ai-agent-tool
+```
+
+Helm packaging shortcuts are available as well:
+
+```bash
+# Install using default RabbitMQ messaging
+make helm-install RELEASE=oss-ai-agent-tool-dev NAMESPACE=oss-ai-agent-tool-dev
+
+# Swap to Kafka-backed messaging
+make helm-kafka RELEASE=oss-ai-agent-tool-dev NAMESPACE=oss-ai-agent-tool-dev
+```
+
 ### Repository/permission requirements
 - Settings → Actions → General → Workflow permissions → **Read and write permissions**.
 - Default `GITHUB_TOKEN` scopes are sufficient (`contents: write`, `packages: write`, `id-token: write`).
@@ -63,6 +85,17 @@ helm pull oci://ghcr.io/<owner>/oss-ai-agent-tool/charts/oss-ai-agent-tool --ver
 
 ## Release notes automation (`release-drafter.yml`)
 `Release Drafter` groups merged pull requests by category and prepares draft notes tagged as `v<next patch>`. It runs automatically via the GitHub App once enabled in repository settings.
+
+## Production Docker Compose
+
+For single-node smoke tests that approximate the CI images, use `docker-compose.prod.yaml`:
+
+```bash
+IMAGE_PREFIX=ghcr.io/<owner>/oss-ai-agent-tool IMAGE_TAG=dev \
+  docker compose -f docker-compose.prod.yaml up -d
+```
+
+The compose file builds the TypeScript memory service locally and wires gateway → orchestrator → indexer along with Redis, Postgres, and RabbitMQ (enable Kafka with `--profile kafka`).
 
 ## Renovate
 `renovate.json` (already present) continues to manage dependency update PRs. Combine it with the CI & security workflows to ensure automated updates remain safe.
