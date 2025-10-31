@@ -1,6 +1,7 @@
 image:
   repo: ghcr.io/yourorg/oss-ai-agent-tool
   tag: "0.1.0"
+  pullPolicy: IfNotPresent
 
 runMode: consumer            # or enterprise
 
@@ -46,3 +47,15 @@ jaeger:
   enabled: true
 langfuse:
   enabled: true
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: gateway
+  tls: []

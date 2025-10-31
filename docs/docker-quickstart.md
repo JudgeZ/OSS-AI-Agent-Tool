@@ -14,7 +14,16 @@ Use Docker Compose to run the OSS AI Agent Tool's application containers locally
 ```bash
 git clone https://github.com/<owner>/OSS-AI-Agent-Tool.git
 cd OSS-AI-Agent-Tool
-cp config/app.example.yaml config/app.yaml
+mkdir -p config
+cat <<'EOF' > config/app.yaml
+runMode: consumer
+messaging:
+  type: rabbitmq
+providers:
+  defaultRoute: balanced
+secrets:
+  backend: localfile
+EOF
 ```
 
 Edit `config/app.yaml` (or set environment variables) to match your provider credentials and messaging preferences. See [Configuration](./configuration.md) for the full schema.
@@ -68,7 +77,7 @@ docker compose -f compose.dev.yaml exec gateway go run ./apps/gateway-api
 Once the orchestrator and gateway processes are running inside their containers, verify the local endpoints:
 
 * Gateway health: <http://localhost:8080/healthz>
-* Orchestrator plan endpoint: <http://localhost:3000/plan>
+* Orchestrator plan endpoint: <http://localhost:4000/plan>
 
 Use the CLI to generate a plan and agent skeleton:
 

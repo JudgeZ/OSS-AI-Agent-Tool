@@ -74,6 +74,7 @@ Create a values file (`values.local.yaml`) tailored to your cluster:
 runMode: consumer
 image:
   registry: ghcr.io/<owner>/oss-ai-agent-tool
+  pullPolicy: IfNotPresent
 messaging:
   type: rabbitmq            # or kafka
 rabbitmq:
@@ -115,13 +116,13 @@ kubectl get pods -l app.kubernetes.io/instance=ossaat -w
 
 ## 5. Expose the services
 
-The chart provisions Kubernetes Services for gateway (`ClusterIP`) and orchestrator (`ClusterIP`). To reach them externally:
+The chart provisions Deployments and ClusterIP Services for both the gateway API and orchestrator. To reach them externally:
 
-* Enable the included Ingress template by setting `ingress.enabled=true` and configuring hosts/TLS.
+* Enable the included Ingress template by setting `ingress.enabled=true`, specifying `ingress.className`, and providing at least one host rule.
 * Alternatively, port-forward for debugging:
   ```bash
   kubectl port-forward svc/ossaat-gateway-api 8080:80
-  kubectl port-forward svc/ossaat-orchestrator 3000:3000
+  kubectl port-forward svc/ossaat-orchestrator 4000:4000
   ```
 
 ## 6. Post-deploy checks
