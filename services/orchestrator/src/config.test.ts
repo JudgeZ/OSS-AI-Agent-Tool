@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { loadConfig } from "./config.js";
+import { ConfigLoadError, loadConfig } from "./config.js";
 
 const ENV_KEYS = [
   "RUN_MODE",
@@ -152,5 +152,24 @@ secrets:
     expect(config.providers.enabled).toEqual(["openai", "mistral"]);
     expect(config.auth.oauth.redirectBaseUrl).toBe("https://env.example.com/callback");
     expect(config.secrets.backend).toBe("localfile");
+  });
+
+  it("throws a ConfigLoadError when the YAML file cannot be parsed", () => {
+    const configPath = createTempConfigFile(`runMode: [invalid`);
+    process.env.APP_CONFIG = configPath;
+    process.env.RUN_MODE = "enterprise";
+
+    let thrownError: unknown;
+    try {
+      loadConfig();
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBeInstanceOf(ConfigLoadError);
+    const configError = thrownError as ConfigLoadError;
+    expect(configError.message).toContain("Failed to load orchestrator config");
+    expect(configError.cause).toBeInstanceOf(Error);
+    expect((configError.cause as Error).message).not.toHaveLength(0);
   });
 });
