@@ -12,6 +12,8 @@ spec:
   ports:
     - name: broker
       port: 9092
+    - name: controller
+      port: 9093
 ---
 apiVersion: apps/v1
 kind: Deployment

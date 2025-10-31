@@ -30,7 +30,7 @@ const DEFAULT_BASE_DELAY_MS = 200;
 export class ToolClientError extends Error {
   readonly retryable: boolean;
   readonly code?: number;
-  override readonly cause?: unknown;
+  readonly cause?: unknown;
 
   constructor(message: string, options: { code?: number; retryable?: boolean; cause?: unknown } = {}) {
     super(message);
@@ -53,8 +53,8 @@ export type ToolAgentClientOptions = {
 
 function toProtoInvocation(input: ToolInvocation): ExecuteToolRequest {
   const invocation = parseToolInvocation({
-    invocationId: input.invocationId || randomUUID(),
-    ...input
+    ...input,
+    invocationId: input.invocationId ?? randomUUID()
   });
   const metadata: Record<string, string> = {};
   for (const [key, value] of Object.entries(invocation.metadata)) {

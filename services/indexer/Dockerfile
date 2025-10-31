@@ -7,13 +7,9 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 RUN cargo build --release
 
-FROM debian:bookworm-slim
-RUN addgroup --system indexer && adduser --system --ingroup indexer --home /app indexer \
-    && apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-USER indexer:indexer
+FROM gcr.io/distroless/cc-debian12:nonroot
 WORKDIR /app
-COPY --from=build /app/target/release/ossaat-indexer /usr/local/bin/indexer
+COPY --from=build /app/target/release/ossaat-indexer /app/indexer
 EXPOSE 7070
 ENV RUST_LOG=info
-ENTRYPOINT ["/usr/local/bin/indexer"]
+ENTRYPOINT ["/app/indexer"]

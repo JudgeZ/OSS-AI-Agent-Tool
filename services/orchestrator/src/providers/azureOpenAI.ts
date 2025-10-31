@@ -37,8 +37,14 @@ async function defaultClientFactory({
   endpoint: string;
   apiVersion?: string;
 }): Promise<AzureOpenAIClient> {
-  const { AzureOpenAI } = await import("@azure/openai");
-  return new AzureOpenAI({ apiKey, endpoint, apiVersion });
+  const azureModule = await import("@azure/openai");
+  const moduleExports = azureModule as Record<string, unknown>;
+  const ctorCandidate = moduleExports.AzureOpenAI ?? moduleExports.default;
+  if (typeof ctorCandidate !== "function") {
+    throw new Error("Azure OpenAI client is not available");
+  }
+  const AzureOpenAIConstructor = ctorCandidate as new (...args: any[]) => unknown;
+  return new AzureOpenAIConstructor({ apiKey, endpoint, apiVersion }) as unknown as AzureOpenAIClient;
 }
 
 function toAzureMessages(messages: ChatMessage[]) {

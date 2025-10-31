@@ -41,13 +41,19 @@ async function defaultClientFactory({ apiKey }: { apiKey: string }): Promise<Ant
   return new Anthropic({ apiKey }) as unknown as AnthropicClient;
 }
 
-function toAnthropicMessages(messages: ChatMessage[]) {
+function toAnthropicMessages(messages: ChatMessage[]): Array<{
+  role: "user" | "assistant";
+  content: Array<{ type: "text"; text: string }>;
+}> {
   return messages
     .filter(msg => msg.role !== "system")
-    .map(msg => ({
-      role: msg.role === "assistant" ? "assistant" : "user",
-      content: [{ type: "text" as const, text: msg.content }]
-    }));
+    .map(msg => {
+      const role: "user" | "assistant" = msg.role === "assistant" ? "assistant" : "user";
+      return {
+        role,
+        content: [{ type: "text", text: msg.content }]
+      };
+    });
 }
 
 export class AnthropicProvider implements ModelProvider {

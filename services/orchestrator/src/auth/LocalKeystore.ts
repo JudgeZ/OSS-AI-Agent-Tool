@@ -1,4 +1,5 @@
 import { randomBytes, scrypt as nodeScrypt } from "node:crypto";
+import type { ScryptOptions } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -35,7 +36,12 @@ type ScryptParameters = {
 const KEY_LENGTH = 32;
 const SCRYPT_PARAMS = { N: 1 << 15, r: 8, p: 1 } as const;
 const SALT_LENGTH = 16;
-const scrypt = promisify(nodeScrypt);
+const scrypt = promisify(nodeScrypt) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: ScryptOptions
+) => Promise<Buffer>;
 
 type Sodium = {
   ready: Promise<void>;

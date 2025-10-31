@@ -27,7 +27,7 @@ export type OpenAIProviderOptions = {
 
 async function defaultClientFactory({ apiKey }: { apiKey: string }): Promise<OpenAIClient> {
   const { default: OpenAI } = await import("openai");
-  return new OpenAI({ apiKey });
+  return new OpenAI({ apiKey }) as unknown as OpenAIClient;
 }
 
 export class OpenAIProvider implements ModelProvider {

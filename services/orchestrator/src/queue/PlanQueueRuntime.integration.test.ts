@@ -6,7 +6,14 @@ import path from "node:path";
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EnqueueOptions, QueueAdapter, QueueHandler, QueueMessage, RetryOptions } from "./QueueAdapter.js";
+import type {
+  EnqueueOptions,
+  QueueAdapter,
+  QueueHandler,
+  QueueMessage,
+  RetryOptions
+} from "./QueueAdapter.js";
+import type { PlanStepEvent } from "../plan/events.js";
 
 class MockEnvelope<T> {
   constructor(
@@ -146,7 +153,7 @@ class MockQueueAdapter implements QueueAdapter {
 const adapterRef: { current: MockQueueAdapter } = { current: new MockQueueAdapter() };
 
 vi.mock("./QueueAdapter.js", async actual => {
-  const module = await actual();
+  const module = (await actual()) as typeof import("./QueueAdapter.js");
   return {
     ...module,
     getQueueAdapter: vi.fn(async () => adapterRef.current),
@@ -155,10 +162,10 @@ vi.mock("./QueueAdapter.js", async actual => {
   };
 });
 
-const executeToolMock = vi.fn();
+const executeToolMock = vi.fn<(invocation: unknown) => Promise<any[]>>();
 
 vi.mock("../grpc/AgentClient.js", async actual => {
-  const module = await actual();
+  const module = (await actual()) as typeof import("../grpc/AgentClient.js");
   return {
     ...module,
     getToolAgentClient: vi.fn(() => ({ executeTool: executeToolMock })),
@@ -171,7 +178,7 @@ describe("PlanQueueRuntime integration", () => {
   let storePath: string;
   let runtime: typeof import("./PlanQueueRuntime.js");
   let eventsModule: typeof import("../plan/events.js");
-  let publishSpy: ReturnType<typeof vi.spyOn>;
+  let publishSpy: ReturnType<typeof vi.spyOn> | undefined;
 
   beforeAll(async () => {
     runtime = await import("./PlanQueueRuntime.js");
@@ -185,11 +192,11 @@ describe("PlanQueueRuntime integration", () => {
     storePath = path.join(storeDir, "state.json");
     process.env.PLAN_STATE_PATH = storePath;
     runtime.resetPlanQueueRuntime();
-    publishSpy = vi.spyOn(eventsModule, "publishPlanStepEvent");
+    publishSpy = vi.spyOn(eventsModule as any, "publishPlanStepEvent");
   });
 
   afterEach(async () => {
-    publishSpy?.mockRestore();
+    publishSpy?.mockRestore?.();
     await fs.rm(storeDir, { recursive: true, force: true });
   });
 
@@ -214,22 +221,25 @@ describe("PlanQueueRuntime integration", () => {
       successCriteria: ["ok"]
     };
 
-    executeToolMock.mockImplementationOnce(() => new Promise(() => {}));
+    executeToolMock.mockImplementationOnce(() => new Promise<any[]>(() => {}));
     executeToolMock.mockImplementationOnce(async () => [
       { state: "completed", summary: "Completed run", planId: plan.id, stepId: "s1", invocationId: "inv-2" }
     ]);
 
     await runtime.submitPlanSteps(plan, "trace-1");
     await vi.waitFor(() => expect(executeToolMock).toHaveBeenCalledTimes(1), { timeout: 1000 });
-    expect(publishSpy.mock.calls.some(([event]) => event.step.state === "running")).toBe(true);
+    const calls = (publishSpy?.mock.calls ?? []) as Array<[PlanStepEvent]>;
+    expect(calls.some(([event]) => event.step.state === "running")).toBe(true);
 
     adapterRef.current.simulateDisconnect();
     runtime.resetPlanQueueRuntime();
 
-    publishSpy.mockClear();
+    publishSpy?.mockClear?.();
     await runtime.initializePlanQueueRuntime();
-    expect(publishSpy).toHaveBeenCalled();
-    expect(publishSpy.mock.calls[0]?.[0].step.state).toBe("running");
+    expect(publishSpy!).toHaveBeenCalled();
+    const replayCalls = (publishSpy?.mock.calls ?? []) as Array<[PlanStepEvent]>;
+    const firstCall = replayCalls[0]?.[0];
+    expect(firstCall?.step.state).toBe("running");
 
     await vi.waitFor(() => expect(executeToolMock).toHaveBeenCalledTimes(2), { timeout: 2000 });
 
@@ -238,6 +248,7 @@ describe("PlanQueueRuntime integration", () => {
     const remaining = await persisted.listActiveSteps();
     expect(remaining).toHaveLength(0);
 
-    expect(publishSpy.mock.calls.some(([event]) => event.step.state === "completed")).toBe(true);
+    const finalCalls = (publishSpy?.mock.calls ?? []) as Array<[PlanStepEvent]>;
+    expect(finalCalls.some(([event]) => event.step.state === "completed")).toBe(true);
   });
 });

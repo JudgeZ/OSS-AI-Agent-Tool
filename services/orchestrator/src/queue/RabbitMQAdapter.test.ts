@@ -6,6 +6,7 @@ import { RabbitMQAdapter } from "./RabbitMQAdapter.js";
 import { queueDepthGauge, queueRetryCounter, resetMetrics } from "../observability/metrics.js";
 
 import type { ConsumeMessage, Options } from "amqplib";
+import type { MetricObjectWithValues, MetricValue } from "prom-client";
 
 type StoredMessage = {
   queue: string;
@@ -129,17 +130,14 @@ class MockConnection extends EventEmitter {
 }
 
 async function getMetricValue(
-  metric: {
-    get(): Promise<{ values: Array<{ value: number; labels: Record<string, string> }> } | { values: Array<{ value: number; labels: Record<string, string> }> }>;
-  },
+  metric: { get(): Promise<MetricObjectWithValues<MetricValue<string>>> },
   labels: Record<string, string>
 ): Promise<number> {
   const data = await metric.get();
-  const values = Array.isArray((data as any).values) ? (data as any).values : [];
-  const match = values.find(entry => {
-    return Object.entries(labels).every(([key, value]) => entry.labels?.[key] === value);
-  });
-  return match ? match.value : 0;
+  const match = data.values.find(entry =>
+    Object.entries(labels).every(([key, value]) => entry.labels?.[key] === value)
+  );
+  return match ? Number(match.value) : 0;
 }
 
 async function flushMicrotasks(): Promise<void> {
