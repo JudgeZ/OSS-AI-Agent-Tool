@@ -20,9 +20,12 @@ test('timeline renders orchestrator events and captures approval flow', async ({
   await expect(approvalModal).toBeHidden({ timeout: 5_000 });
 
   const stepTwo = page.getByTestId('step-s2');
+  await expect(stepTwo).toContainText('Apply repository changes');
   await expect(stepTwo).toContainText('repo.write');
+  await expect(stepTwo).toContainText('approval required');
   await expect(stepTwo).toContainText('approved', { timeout: 10_000 });
   await expect(stepTwo).toContainText('completed', { timeout: 10_000 });
+  await expect(stepTwo.locator('.history')).toContainText('12:00:00 AM', { timeout: 10_000 });
 
   const stepThree = page.getByTestId('step-s3');
   await expect(stepThree).toContainText('Run smoke tests', { timeout: 10_000 });

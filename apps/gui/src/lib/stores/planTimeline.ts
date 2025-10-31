@@ -63,29 +63,79 @@ const initialState: TimelineState = {
 };
 
 interface StepEventPayload {
-  plan_id: string;
+  plan_id?: string;
+  planId?: string;
+  occurred_at?: string;
+  occurredAt?: string;
+  detail?: {
+    occurred_at?: string;
+    occurredAt?: string;
+    step?: {
+      capability_label?: string;
+      capabilityLabel?: string;
+      approval_required?: boolean;
+      approvalRequired?: boolean;
+      transitioned_at?: string;
+      transitionedAt?: string;
+    };
+  };
   step: {
     id: string;
     action?: string;
     tool?: string;
     capability: string;
     capability_label?: string;
+    capabilityLabel?: string;
     labels?: string[];
     state: StepState;
     summary?: string;
     approval_required?: boolean;
+    approvalRequired?: boolean;
     timeoutSeconds?: number;
     timeout_seconds?: number;
     transitioned_at?: string;
+    transitionedAt?: string;
     output?: Record<string, unknown>;
   };
 }
 
+function coalesce<T>(...values: Array<T | null | undefined>): T | undefined {
+  for (const value of values) {
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function resolveTimestamp(payload: StepEventPayload): string {
+  const transitionedAt = coalesce(
+    payload.step.transitioned_at,
+    payload.step.transitionedAt,
+    payload.detail?.step?.transitioned_at,
+    payload.detail?.step?.transitionedAt
+  );
+  if (transitionedAt) {
+    return transitionedAt;
+  }
+  const occurredAt = coalesce(
+    payload.detail?.occurred_at,
+    payload.detail?.occurredAt,
+    payload.occurred_at,
+    payload.occurredAt
+  );
+  return occurredAt ?? new Date().toISOString();
+}
+
 let eventSource: EventSource | null = null;
 
-function toHistoryEntry(step: StepEventPayload['step']): StepHistoryEntry {
-  const at = step.transitioned_at ?? new Date().toISOString();
-  return { state: step.state, at, summary: step.summary, output: step.output };
+function toHistoryEntry(payload: StepEventPayload): StepHistoryEntry {
+  return {
+    state: payload.step.state,
+    at: resolveTimestamp(payload),
+    summary: payload.step.summary,
+    output: payload.step.output
+  };
 }
 
 function toDiffPayload(output: Record<string, unknown> | undefined): DiffPayload | undefined {
@@ -130,10 +180,22 @@ function toDiffPayload(output: Record<string, unknown> | undefined): DiffPayload
 }
 
 function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineState {
-  const historyEntry = toHistoryEntry(payload.step);
+  const historyEntry = toHistoryEntry(payload);
   const steps = [...state.steps];
   const existingIndex = steps.findIndex((step) => step.id === payload.step.id);
-  const approvalRequired = Boolean(payload.step.approval_required);
+  const approvalRequiredValue = coalesce(
+    payload.step.approval_required,
+    payload.step.approvalRequired,
+    payload.detail?.step?.approval_required,
+    payload.detail?.step?.approvalRequired
+  );
+  const capabilityLabel =
+    coalesce(
+      payload.step.capabilityLabel,
+      payload.detail?.step?.capabilityLabel,
+      payload.step.capability_label,
+      payload.detail?.step?.capability_label
+    ) ?? payload.step.capability;
   const timeoutSeconds =
     typeof payload.step.timeoutSeconds === 'number'
       ? payload.step.timeoutSeconds
@@ -147,13 +209,13 @@ function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineSt
       id: payload.step.id,
       action: payload.step.action ?? payload.step.id,
       capability: payload.step.capability,
-      capabilityLabel: payload.step.capability_label ?? payload.step.capability,
+      capabilityLabel,
       tool: payload.step.tool ?? payload.step.action ?? payload.step.id,
       labels: payload.step.labels ?? [],
       timeoutSeconds: timeoutSeconds ?? 0,
       state: payload.step.state,
       summary: payload.step.summary,
-      approvalRequired,
+      approvalRequired: approvalRequiredValue ?? false,
       history: [historyEntry],
       latestOutput,
       diff: toDiffPayload(latestOutput)
@@ -168,13 +230,13 @@ function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineSt
       ...existing,
       action: payload.step.action ?? existing.action,
       capability: payload.step.capability ?? existing.capability,
-      capabilityLabel: payload.step.capability_label ?? existing.capabilityLabel ?? existing.capability,
+      capabilityLabel: capabilityLabel ?? existing.capabilityLabel ?? existing.capability,
       tool: payload.step.tool ?? existing.tool,
       labels: payload.step.labels ?? existing.labels,
       timeoutSeconds: timeoutSeconds ?? existing.timeoutSeconds,
       state: payload.step.state,
       summary: payload.step.summary ?? existing.summary,
-      approvalRequired: approvalRequired || existing.approvalRequired,
+      approvalRequired: approvalRequiredValue ?? existing.approvalRequired,
       history,
       latestOutput,
       diff
