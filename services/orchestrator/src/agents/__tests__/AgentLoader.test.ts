@@ -48,6 +48,7 @@ describe("loadAgentProfile", () => {
     expect(profile.constraints).toEqual([
       "Prioritize reliability and test coverage over speed",
       "Never bypass security gates",
+      "Capture diffs and test results in the plan timeline",
     ]);
     expect(profile.body).toContain("# Agent Guide");
   });

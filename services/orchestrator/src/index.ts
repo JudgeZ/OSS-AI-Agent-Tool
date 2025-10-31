@@ -14,7 +14,7 @@ import { routeChat } from "./providers/ProviderRegistry.js";
 import { withSpan } from "./observability/tracing.js";
 import {
   initializePlanQueueRuntime,
-  persistPlanStepState,
+  resolvePlanStepApproval,
   submitPlanSteps
 } from "./queue/PlanQueueRuntime.js";
 import { authorize as oauthAuthorize, callback as oauthCallback } from "./auth/OAuthController.js";
@@ -125,18 +125,7 @@ export function createServer(): Express {
     const summary = rationale ? `${latest.step.summary ?? ""}${latest.step.summary ? " " : ""}(${decision}: ${rationale})` : latest.step.summary;
 
     try {
-      await persistPlanStepState(planId, stepId, decision, summary);
-      publishPlanStepEvent({
-        event: "plan.step",
-        traceId: latest.traceId,
-        planId,
-        step: {
-          ...latest.step,
-          state: decision,
-          summary
-        }
-      });
-
+      await resolvePlanStepApproval({ planId, stepId, decision, summary });
       res.status(204).end();
     } catch (error) {
       next(error);

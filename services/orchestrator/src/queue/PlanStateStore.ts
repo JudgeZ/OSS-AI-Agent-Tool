@@ -51,7 +51,12 @@ export class PlanStateStore {
     this.filePath = options?.filePath ?? defaultPath();
   }
 
-  async rememberStep(planId: string, step: PlanStep, traceId: string): Promise<void> {
+  async rememberStep(
+    planId: string,
+    step: PlanStep,
+    traceId: string,
+    initialState: PlanStepState = "queued"
+  ): Promise<void> {
     await this.ensureLoaded();
     const key = this.toKey(planId, step.id);
     const entry: PersistedStep = {
@@ -60,7 +65,7 @@ export class PlanStateStore {
       stepId: step.id,
       traceId,
       step,
-      state: "queued",
+      state: initialState,
       updatedAt: new Date().toISOString()
     };
     this.records.set(key, entry);
@@ -107,6 +112,15 @@ export class PlanStateStore {
   async listActiveSteps(): Promise<PersistedStep[]> {
     await this.ensureLoaded();
     return Array.from(this.records.values()).map(entry => ({ ...entry }));
+  }
+
+  async getStep(planId: string, stepId: string): Promise<{ step: PlanStep; traceId: string } | undefined> {
+    await this.ensureLoaded();
+    const record = this.records.get(this.toKey(planId, stepId));
+    if (!record) {
+      return undefined;
+    }
+    return { step: record.step, traceId: record.traceId };
   }
 
   async clear(): Promise<void> {
