@@ -16,7 +16,7 @@ services:
     environment:
       PORT: "4000"
       MEMORY_SVC_URL: http://memory-svc:8081
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_URL: amqp://orchestrator:orchestrator@rabbitmq:5672
       POSTGRES_DSN: postgres://ossaat:ossaat@postgres:5432/ossaat?sslmode=disable
       REDIS_URL: redis://redis:6379/0
     ports:
@@ -57,8 +57,8 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: orchestrator
+      RABBITMQ_DEFAULT_PASS: orchestrator
     ports:
       - "15672:15672"
       - "5672:5672"
