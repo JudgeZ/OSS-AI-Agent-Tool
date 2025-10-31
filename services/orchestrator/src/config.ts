@@ -128,7 +128,8 @@ export function loadConfig(): AppConfig {
   } catch {}
 
   const envRunMode = asRunMode(process.env.RUN_MODE);
-  const envMessageType = asMessagingType(process.env.MESSAGE_BUS);
+  const envMessageType =
+    asMessagingType(process.env.MESSAGING_TYPE) ?? asMessagingType(process.env.MESSAGE_BUS);
   const envProviders = process.env.PROVIDERS;
   const envRedirectBaseUrl = process.env.OAUTH_REDIRECT_BASE;
   const envSecretsBackend = asSecretsBackend(process.env.SECRETS_BACKEND);

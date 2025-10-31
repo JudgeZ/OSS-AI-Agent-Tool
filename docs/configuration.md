@@ -40,7 +40,7 @@ Relevant environment overrides:
 | `TOOL_AGENT_ENDPOINT` | Host:port for the tool agent gRPC server. |
 | `TOOL_AGENT_RETRIES` | Overrides retry attempts for tool execution. |
 | `TOOL_AGENT_TIMEOUT_MS` | Per-call timeout in milliseconds. |
-| `MESSAGING_TYPE` | Forces `rabbitmq` or `kafka` regardless of YAML setting (useful in CI matrices). |
+| `MESSAGING_TYPE` (preferred) / `MESSAGE_BUS` (legacy) | Forces `rabbitmq` or `kafka` regardless of YAML setting (useful in CI matrices). |
 | `SECRETS_BACKEND` | `localfile` or `vault`; coordinates with Helm `secrets.backend` and Compose mounts. |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Optional overrides for Google OAuth refresh flow (defaults can also be stored in SecretsStore). |
 | `GOOGLE_SERVICE_ACCOUNT` | Base64-safe JSON for Google service account credentials when running in enterprise mode. |
