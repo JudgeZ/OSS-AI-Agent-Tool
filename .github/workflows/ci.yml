@@ -105,6 +105,41 @@ jobs:
       - name: Build (if configured)
         run: npm run build --if-present
 
+  orchestrator-integration:
+    name: Orchestrator integration (RabbitMQ)
+    runs-on: ubuntu-latest
+    services:
+      rabbitmq:
+        image: rabbitmq:3.13-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/orchestrator/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/orchestrator
+        run: npm ci
+
+      - name: Run integration tests
+        working-directory: services/orchestrator
+        env:
+          RABBITMQ_URL: amqp://guest:guest@localhost:5672
+          CI: 'true'
+        run: npx vitest run --reporter=basic src/queue/PlanQueueRuntime.integration.test.ts src/queue/RabbitMQAdapter.integration.test.ts
+
   rust:
     name: Rust fmt, lint & test
     runs-on: ubuntu-latest

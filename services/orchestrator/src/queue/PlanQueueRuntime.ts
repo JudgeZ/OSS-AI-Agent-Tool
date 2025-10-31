@@ -159,6 +159,9 @@ async function setupStepConsumer(): Promise<void> {
     const traceId = payload.traceId || message.headers["trace-id"] || message.id;
     const invocationId = randomUUID();
 
+    const registryKey = `${planId}:${step.id}`;
+    stepRegistry.set(registryKey, { step, traceId });
+
     emitPlanEvent(planId, step, traceId, { state: "running", summary: "Dispatching tool agent" });
 
     try {
@@ -190,7 +193,7 @@ async function setupStepConsumer(): Promise<void> {
       }
 
       if (events.some(event => TERMINAL_STATES.has(event.state))) {
-        stepRegistry.delete(`${planId}:${step.id}`);
+        stepRegistry.delete(registryKey);
       }
 
       await message.ack();
@@ -210,7 +213,7 @@ async function setupStepConsumer(): Promise<void> {
       }
 
       emitPlanEvent(planId, step, traceId, { state: "failed", summary: toolError.message });
-      stepRegistry.delete(`${planId}:${step.id}`);
+      stepRegistry.delete(registryKey);
       await message.ack();
     }
   });

@@ -26,6 +26,7 @@ Set `RUN_MODE=consumer|enterprise`. Behavior differences:
 ## Queue runtime overview
 
 - **Plan submission**: orchestrator publishes each plan step to the `plan.steps` queue with idempotency keys (`<planId>:<stepId>`) to prevent duplicates.
+- **Restart resilience**: when the orchestrator restarts, queued tasks are rehydrated into the in-memory registry so completions still carry capability/tool metadata and long-running steps resume execution automatically.
 - **Completions**: downstream agents send status updates to the `plan.completions` queue; orchestrator acks, updates SSE history, and tracks dead-letter counts.
 - **Metrics**: Prometheus gauge `orchestrator_queue_depth{queue=...}` reflects backlog; counter `orchestrator_queue_retries_total{queue=...}` increments on retries to surface saturation/poison-pill patterns.
 - **Dead letters**: failures can be routed to `<queue>.dead` for operator triage; set `x-dead-letter-reason` header to annotate cause.

@@ -47,7 +47,7 @@ When a step enters the `waiting_approval` state and advertises a privileged capa
 
 ## Smoke tests
 
-Playwright smoke tests exercise the happy-path orchestration run. They spin up a mock SSE orchestrator (`npm run mock:orchestrator`), stream a plan, approve the guarded step, and assert that all status transitions render in the timeline. Run them with:
+Playwright smoke tests exercise the happy-path orchestration run. They spin up a mock SSE orchestrator (`npm run mock:orchestrator`), stream a plan, approve the guarded step, and assert that all status transitions render in the timeline. These checks run automatically in CI via `.github/workflows/security.yml` so regressions surface even when the GUI code does not change. Run them locally with:
 
 ```bash
 npm run test:e2e
