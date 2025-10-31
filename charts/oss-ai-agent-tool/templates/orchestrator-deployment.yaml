@@ -55,6 +55,9 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
           {{- end }}
+          volumeMounts:
+            - name: plan-state
+              mountPath: /app/data
           {{- with .Values.orchestrator.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
@@ -63,6 +66,9 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      volumes:
+        - name: plan-state
+          emptyDir: {}
           {{- with .Values.orchestrator.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
