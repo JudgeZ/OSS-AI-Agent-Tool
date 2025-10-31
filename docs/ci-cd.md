@@ -6,7 +6,7 @@ The repository ships with **four GitHub Actions workflows** that cover build/tes
 - **Triggers:** pull requests targeting `main`, pushes to `main`, or manual `Run workflow` dispatches.
 - **What runs:**
   - Go formatting/vet/test (`go fmt`, `go vet`, `go test`) whenever a `go.mod` is present.
-  - TypeScript linting, `tsc --noEmit` type-checks, unit tests (via `npm test --if-present`), and builds for each workspace (`services/orchestrator`, `apps/cli`).
+- TypeScript linting, `tsc --noEmit` type-checks, unit tests (via `npm test --if-present`), and builds for each workspace (`services/orchestrator`, `apps/cli`). The orchestrator matrix target provisions RabbitMQ 3.x as an Actions service so the Vitest suite can run the resume/retry integration tests against a live broker.
   - Rust `fmt`, `clippy`, and `cargo test` when a `Cargo.toml` appears (future indexer service).
 - **Pass criteria:** all language jobs must succeed; any lint/test failure blocks the PR/merge.
 
@@ -59,6 +59,7 @@ helm pull oci://ghcr.io/<owner>/oss-ai-agent-tool/charts/oss-ai-agent-tool --ver
   - Semgrep SAST using the `auto` ruleset.
   - CodeQL analysis for Go and TypeScript/JavaScript.
   - Gitleaks secret detection (`detect --redact`).
+  - Playwright GUI smoke tests (`apps/gui`) exercising the SSE timeline + approval flow against the bundled mock orchestrator. The workflow installs browser dependencies with `npx playwright install --with-deps` before launching the tests headlessly.
 - **Why it matters:** all jobs must pass; any vulnerability or secret finding blocks merges until addressed.
 
 ## Release notes automation (`release-drafter.yml`)

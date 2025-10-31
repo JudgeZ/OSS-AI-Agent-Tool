@@ -61,6 +61,16 @@ jobs:
   typescript:
     name: TypeScript lint, test & build (${{ matrix.project.name }})
     runs-on: ubuntu-latest
+    services:
+      rabbitmq:
+        image: rabbitmq:3.13-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +81,8 @@ jobs:
           - name: cli
             path: apps/cli
             node: '20'
+    env:
+      RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672
     defaults:
       run:
         working-directory: ${{ matrix.project.path }}

@@ -6,6 +6,7 @@ import type { Plan, PlanStep } from "../plan/planner.js";
 import { getToolAgentClient, resetToolAgentClient, ToolClientError } from "../grpc/AgentClient.js";
 import type { ToolEvent } from "../plan/validation.js";
 import { getQueueAdapter } from "./QueueAdapter.js";
+import { defaultPlanResumeStore } from "./PlanResumeStore.js";
 
 export const PLAN_STEPS_QUEUE = "plan.steps";
 export const PLAN_COMPLETIONS_QUEUE = "plan.completions";
@@ -33,6 +34,8 @@ export type PlanStepCompletionPayload = {
 
 const stepRegistry = new Map<string, { step: PlanStep; traceId: string }>();
 let initialized: Promise<void> | null = null;
+
+const resumeStore = defaultPlanResumeStore;
 
 const TERMINAL_STATES = new Set<ToolEvent["state"]>(["completed", "failed"]);
 
@@ -75,7 +78,10 @@ function publishToolEvents(planId: string, baseStep: PlanStep, traceId: string, 
 export async function initializePlanQueueRuntime(): Promise<void> {
   if (!initialized) {
     initialized = Promise.all([setupStepConsumer(), setupCompletionConsumer()])
-      .then(() => undefined)
+      .then(async () => {
+        await resumeInflightSteps();
+        return undefined;
+      })
       .catch(error => {
         initialized = null;
         throw error;
@@ -90,6 +96,10 @@ export function resetPlanQueueRuntime(): void {
   resetToolAgentClient();
 }
 
+export async function clearPlanRuntimeStateForTests(): Promise<void> {
+  await resumeStore.clearAll();
+}
+
 export async function submitPlanSteps(plan: Plan, traceId: string): Promise<void> {
   await initializePlanQueueRuntime();
   const adapter = await getQueueAdapter();
@@ -101,6 +111,7 @@ export async function submitPlanSteps(plan: Plan, traceId: string): Promise<void
       idempotencyKey: key,
       headers: { "trace-id": traceId }
     });
+    await resumeStore.recordQueued(plan.id, step, traceId);
   });
 
   await Promise.all(submissions);
@@ -159,6 +170,12 @@ async function setupStepConsumer(): Promise<void> {
     const traceId = payload.traceId || message.headers["trace-id"] || message.id;
     const invocationId = randomUUID();
 
+    const shouldProcess = await resumeStore.markRunning(planId, step, traceId);
+    if (!shouldProcess) {
+      await message.ack();
+      return;
+    }
+
     emitPlanEvent(planId, step, traceId, { state: "running", summary: "Dispatching tool agent" });
 
     try {
@@ -194,6 +211,7 @@ async function setupStepConsumer(): Promise<void> {
       }
 
       await message.ack();
+      await resumeStore.markCompleted(planId, step.id);
     } catch (error) {
       const toolError =
         error instanceof ToolClientError
@@ -206,12 +224,37 @@ async function setupStepConsumer(): Promise<void> {
       if (toolError.retryable) {
         emitPlanEvent(planId, step, traceId, { state: "running", summary: `Retry scheduled: ${toolError.message}` });
         await message.retry();
+        await resumeStore.markQueuedAfterRetry(planId, step, traceId);
         return;
       }
 
       emitPlanEvent(planId, step, traceId, { state: "failed", summary: toolError.message });
       stepRegistry.delete(`${planId}:${step.id}`);
       await message.ack();
+      await resumeStore.markCompleted(planId, step.id);
     }
   });
+}
+
+async function resumeInflightSteps(): Promise<void> {
+  const inflight = await resumeStore.getResumableSteps();
+  if (inflight.length === 0) {
+    return;
+  }
+  const adapter = await getQueueAdapter();
+  await Promise.all(
+    inflight.map(async entry => {
+      const key = `${entry.planId}:${entry.step.id}`;
+      stepRegistry.set(key, { step: entry.step, traceId: entry.traceId });
+      await adapter.enqueue<PlanStepTaskPayload>(
+        PLAN_STEPS_QUEUE,
+        { planId: entry.planId, step: entry.step, traceId: entry.traceId },
+        {
+          idempotencyKey: key,
+          headers: { "trace-id": entry.traceId, "x-resumed": "true" }
+        }
+      );
+      await resumeStore.recordQueued(entry.planId, entry.step, entry.traceId);
+    })
+  );
 }

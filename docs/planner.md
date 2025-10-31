@@ -104,3 +104,9 @@ Each step surfaces the capability it exercises, the execution timeout, and wheth
 ## Observability
 
 Every HTTP handler and plan creation call is wrapped in a lightweight tracing shim that records a `traceId`, span attributes (plan id, chat model, etc.), and structured log entries. The implementation is intentionally minimal so OpenTelemetry exporters can be layered in without changing call sites.
+
+## Durable orchestration
+
+The orchestrator persists outstanding plan steps to a password-protected local keystore (`PlanResumeStore`) so long-running tool invocations can survive process restarts or crash recovery. When a plan step is enqueued the runtime stores the full `PlanStep` payload and marks it `queued`. As soon as the queue consumer begins executing the tool agent the state flips to `running`. On acknowledgement—success, failure, or dead-letter—the entry is marked `completed` and eventually evicted.
+
+During bootstrap `initializePlanQueueRuntime()` hydrates the store, repopulates the in-memory step registry, and replays any `running` steps back to RabbitMQ with the original idempotency key. That ensures in-flight work is retried automatically while still deduplicating completed steps. The resume store defaults to `./.runtime/plan-runtime-state.json` but can be relocated with `PLAN_RUNTIME_STORE_PATH`.
