@@ -1,6 +1,6 @@
 # Docker Quickstart
 
-Use Docker Compose to run the OSS AI Agent Tool's application containers locally. The provided stack spins up development environments for the orchestrator (Node.js) and gateway API (Go) so you can iterate on agents, flows, and HTTP surfaces without installing toolchains on the host. External dependencies (RabbitMQ, Redis, Postgres, Jaeger, Langfuse, etc.) are **not** included—point the services to managed instances or run them separately when you need end-to-end flows.
+Use Docker Compose to run the OSS AI Agent Tool's application containers locally. The provided stack builds the orchestrator (Node.js), gateway API (Go), indexer (Rust), and memory service scaffold, and it also launches the full set of supporting dependencies (Redis, Postgres, RabbitMQ, Kafka, Jaeger, Langfuse). This mirrors the development topology defined in `compose.dev.yaml` so you can exercise flows without wiring additional containers by hand. Run `docker compose -f compose.dev.yaml config --services` if you want to confirm the service list locally.
 
 ## Prerequisites
 
@@ -46,38 +46,40 @@ secrets:
 docker compose -f compose.dev.yaml up --build
 ```
 
-This command launches two containers:
+Compose will build images for the in-repo services and then start the following containers (entrypoints reflect the effective command from `docker compose config`):
 
-| Service | Base image | Purpose |
-| --- | --- | --- |
-| `orchestrator` | `node:20-alpine` | Development shell for the orchestrator service |
-| `gateway` | `golang:1.22-alpine` | Development shell for the gateway API |
+| Service | Image / build context | Entrypoint or command | Exposed ports | Purpose |
+| --- | --- | --- | --- | --- |
+| `gateway` | `./apps/gateway-api` → distroless | `/gateway-api` | `8080` | Serves the Gateway HTTP API with SSE endpoints. |
+| `orchestrator` | `./services/orchestrator` | `node dist/index.js` | `4000` | Runs orchestration flows and provider integrations. |
+| `indexer` | `./services/indexer` → distroless | `/app/indexer` | `7070` | Provides AST/indexing APIs for repositories. |
+| `memory-svc` | `node:20-alpine` | `tail -f /dev/null` | _n/a_ | Development container for building the memory service. |
+| `redis` | `redis/redis-stack-server:7.2.0-v9` | default | `6379` | In-memory cache and vector store. |
+| `postgres` | `postgres:15-alpine` | default | `5432` | Application relational datastore. |
+| `rabbitmq` | `rabbitmq:3.13-management` | default | `5672`, `15672` | Message queue plus management UI. |
+| `kafka` | `bitnami/kafka:3.7.0` | default | `9092` | Event backbone (KRaft mode). |
+| `jaeger` | `jaegertracing/all-in-one:1.57` | default | `16686`, `4317`, `4318` | Observability UI and OTLP collectors. |
+| `langfuse` | `langfuse/langfuse:2.14.1` | default | `3000` | LLM tracing and analytics dashboard. |
 
-Both containers mount the repository at `/workspace` and default to an idle `tail -f /dev/null` command so you can exec into them and run your preferred dev workflow. Start the processes you need from separate terminals, for example:
+Because `gateway`, `orchestrator`, and `indexer` start their servers automatically, you can interact with them immediately after the `up` command finishes.
 
-```bash
-# Install dependencies (once per container)
-docker compose -f compose.dev.yaml exec orchestrator npm install
-docker compose -f compose.dev.yaml exec gateway go mod download
-
-# Run the services
-docker compose -f compose.dev.yaml exec orchestrator npm run dev --workspace services/orchestrator
-docker compose -f compose.dev.yaml exec gateway go run ./apps/gateway-api
-```
-
-> **Note:** When you require message queues, databases, or observability backends, run them locally via separate containers (e.g., `docker run rabbitmq:3-management`) or connect to shared development infrastructure.
+> **Need a slimmer stack?** Limit the services you bring up, for example `docker compose -f compose.dev.yaml up gateway orchestrator redis postgres rabbitmq`, or create a local override file with the dependencies you require. Comments in `compose.dev.yaml` note where future profiles (e.g., Kafka) will land.
 
 ### Common flags
 
 * `--detach` to run in the background.
-* `--profile kafka` (future) when switching to Kafka-based deployments.
+* `--profile <name>` when you add your own Compose profiles in a local override to slim the stack further.
 
 ## 3. Verify services
 
-Once the orchestrator and gateway processes are running inside their containers, verify the local endpoints:
+Once the containers show `healthy`/`running` status, verify the local endpoints:
 
 * Gateway health: <http://localhost:8080/healthz>
 * Orchestrator plan endpoint: <http://localhost:4000/plan>
+* Indexer status: <http://localhost:7070/healthz>
+* RabbitMQ management UI: <http://localhost:15672> (user/pass `guest`/`guest`)
+* Jaeger UI: <http://localhost:16686>
+* Langfuse UI: <http://localhost:3000> (defaults seeded via `compose.dev.yaml`)
 
 Use the CLI to generate a plan and agent skeleton:
 
