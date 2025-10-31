@@ -1,6 +1,6 @@
 # CI/CD for OSS AI Agent Tool
 
-The repository ships with **four GitHub Actions workflows** that cover build/test automation, release packaging, and continuous security scanning. All workflows are located in `.github/workflows/` and support manual dispatches for ad-hoc runs.
+The repository ships with **four GitHub Actions workflows** that cover build/test automation, release packaging, and continuous security scanning. All workflows are located in `.github/workflows/` and support manual dispatches for ad-hoc runs. When running the stack locally or in Kubernetes, pair these workflows with the [Docker Quickstart](./docker-quickstart.md) and [Kubernetes Quickstart](./kubernetes-quickstart.md) guides to validate artifacts end-to-end.
 
 ## Continuous Integration (`ci.yml`)
 - **Triggers:** pull requests targeting `main`, pushes to `main`, or manual `Run workflow` dispatches.
@@ -17,7 +17,7 @@ The repository ships with **four GitHub Actions workflows** that cover build/tes
 
 ## Container Releases (`release-images.yml`)
 - **Triggers:** annotated/lightweight tags matching `v*` (e.g., `v0.3.0`) or manual dispatch.
-- **What runs:** for each service with a Dockerfile (`apps/gateway-api`, `services/orchestrator`, `services/indexer`), the workflow:
+- **What runs:** for each service with a Dockerfile (`apps/gateway-api`, `services/orchestrator`, `services/indexer`, `services/memory-svc`), the workflow:
   1. Builds and pushes multi-arch images to `ghcr.io/<owner>/oss-ai-agent-tool/<service>`.
   2. Generates a CycloneDX JSON SBOM via `anchore/sbom-action`.
   3. Performs **keyless cosign signing** using GitHub OIDC (`id-token: write` permission — no secrets required).
@@ -34,9 +34,9 @@ The repository ships with **four GitHub Actions workflows** that cover build/tes
 3. Download SBOMs from the job summary or the GitHub Release attachments.
 
 ## Helm Chart Publishing (`release-charts.yml`)
-- **Triggers:** `v*` or `chart-*` tags, plus manual dispatches.
+- **Triggers:** `v*` or `chart-*` tags, plus manual dispatches. Chart artifacts feed directly into the [Kubernetes Quickstart](./kubernetes-quickstart.md).
 - **What runs:**
-  - `helm lint` and `helm package` for `charts/oss-ai-agent-tool`.
+  - `helm lint` and `helm package` for `charts/oss-ai-agent-tool` (RabbitMQ and Kafka assets, Jaeger/Langfuse, Ingress templates).
   - Publishes the chart to the GitHub Pages index via `helm/chart-releaser-action`.
   - Pushes OCI artifacts to `oci://ghcr.io/<owner>/oss-ai-agent-tool/charts` after logging into GHCR with the Actions token.
 
@@ -71,7 +71,7 @@ helm pull oci://ghcr.io/<owner>/oss-ai-agent-tool/charts/oss-ai-agent-tool --ver
 - **CodeQL:** follow [GitHub's CodeQL CLI docs](https://codeql.github.com/docs/codeql-cli/using-the-codeql-cli/) to initialize and analyze the database (`codeql database create` + `codeql database analyze`).
 
 ## Release notes automation (`release-drafter.yml`)
-`Release Drafter` groups merged pull requests by category and prepares draft notes tagged as `v<next patch>`. It runs automatically via the GitHub App once enabled in repository settings.
+`Release Drafter` groups merged pull requests by category and prepares draft notes tagged as `v<next patch>`. It runs automatically via the GitHub App once enabled in repository settings. Reference the [Security Threat Model](./SECURITY-THREAT-MODEL.md) and [Security Scanning](./security-scanning.md) docs when summarizing risk mitigations in release notes.
 
 ## Renovate
 `renovate.json` (already present) continues to manage dependency update PRs. Combine it with the CI & security workflows to ensure automated updates remain safe.

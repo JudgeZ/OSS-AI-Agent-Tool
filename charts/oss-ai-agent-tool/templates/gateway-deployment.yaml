@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oss-ai-agent-tool.fullname" . }}-gateway-api
+  labels:
+    {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.gatewayApi.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway-api
+  template:
+    metadata:
+      labels:
+        {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway-api
+    spec:
+      containers:
+        - name: gateway-api
+          image: {{ include "oss-ai-agent-tool.image" (dict "Values" .Values "Chart" .Chart "component" "gateway-api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          {{- with .Values.gatewayApi.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

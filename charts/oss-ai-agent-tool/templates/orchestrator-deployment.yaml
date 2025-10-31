@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oss-ai-agent-tool.fullname" . }}-orchestrator
+  labels:
+    {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.orchestrator.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: orchestrator
+  template:
+    metadata:
+      labels:
+        {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: {{ include "oss-ai-agent-tool.image" (dict "Values" .Values "Chart" .Chart "component" "orchestrator") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: 4000
+          env:
+            - name: PORT
+              value: "4000"
+          {{- with .Values.orchestrator.env }}
+            {{- range $key, $value := . }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.orchestrator.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

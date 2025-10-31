@@ -1,0 +1,3 @@
+# Exclude build artifacts and VCS metadata from Docker context
+.git
+bin
