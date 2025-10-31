@@ -54,11 +54,17 @@ services:
     image: node:20-alpine
     working_dir: /workspace/services/memory-svc
     command: ["tail", "-f", "/dev/null"]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     volumes:
       - ./:/workspace:delegated
 
   redis:
     image: redis/redis-stack-server:7.2.0-v9
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     ports:
       - "6379:6379"
     volumes:
@@ -66,6 +72,9 @@ services:
 
   postgres:
     image: postgres:15-alpine
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       POSTGRES_USER: ossaat
       POSTGRES_PASSWORD: ossaat
@@ -77,6 +86,9 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -88,6 +100,9 @@ services:
 
   kafka:
     image: bitnami/kafka:3.7.0
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       KAFKA_ENABLE_KRAFT: "yes"
       KAFKA_CFG_NODE_ID: "1"
@@ -106,6 +121,9 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:1.57
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     ports:
       - "16686:16686"
       - "4317:4317"
@@ -113,6 +131,9 @@ services:
 
   langfuse:
     image: langfuse/langfuse:2.14.1
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       DATABASE_URL: postgres://ossaat:ossaat@postgres:5432/ossaat
       NEXTAUTH_SECRET: dev-secret
