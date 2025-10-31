@@ -1,0 +1,63 @@
+{{- if .Values.indexer.enabled }}
+{{- $root := . -}}
+{{- $defaultIndexerEnv := dict "RUST_LOG" ($root.Values.indexer.logLevel | default "info") -}}
+{{- $indexerEnv := merge $defaultIndexerEnv ($root.Values.indexer.env | default dict) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oss-ai-agent-tool.fullname" . }}-indexer
+  labels:
+    {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.indexer.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: indexer
+  template:
+    metadata:
+      labels:
+        {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: indexer
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: indexer
+          image: {{ include "oss-ai-agent-tool.image" (dict "Values" .Values "Chart" .Chart "component" "indexer") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.indexer.containerPort | default 7070 }}
+          env:
+          {{- range $key, $value := $indexerEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+          {{- end }}
+          {{- with .Values.indexer.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.indexer.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+{{- end }}

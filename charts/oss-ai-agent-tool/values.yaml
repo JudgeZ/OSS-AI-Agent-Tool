@@ -3,50 +3,122 @@ image:
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
-runMode: consumer            # or enterprise
+runMode: consumer
 
 messaging:
-  type: rabbitmq             # or kafka
+  type: rabbitmq
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+networkPolicy:
+  enabled: true
 
 gatewayApi:
   replicas: 2
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 80
+  env: {}
   resources:
     requests: { cpu: "100m", memory: "128Mi" }
-    limits:   { cpu: "500m", memory: "256Mi" }
+    limits: { cpu: "500m", memory: "256Mi" }
 
 orchestrator:
   replicas: 2
-  env:
-    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "false"
-    RABBITMQ_USERNAME: guest
-    RABBITMQ_PASSWORD: guest
-    RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-    RABBITMQ_PREFETCH: "8"
-    RABBITMQ_RETRY_DELAY_MS: "1000"
+  containerPort: 4000
+  service:
+    type: ClusterIP
+    port: 4000
+  env: {}
   hpa:
+    enabled: true
     min: 2
     max: 10
     targetQueueDepth: 5
+    metricName: queue_depth
+  resources:
+    requests: { cpu: "200m", memory: "256Mi" }
+    limits: { cpu: "1", memory: "512Mi" }
+
+indexer:
+  enabled: true
+  replicas: 1
+  containerPort: 7070
+  logLevel: info
+  env: {}
+  service:
+    type: ClusterIP
+    port: 7070
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "500m", memory: "256Mi" }
 
 redis:
   enabled: true
+  image: bitnami/redis:7.2.5
+  persistence:
+    enabled: false
+    size: 1Gi
+    storageClass: ""
+  resources: {}
+
 postgres:
   enabled: true
+  image: postgres:15-alpine
+  database: ossaat
+  username: ossaat
+  password: ossaat
+  persistence:
+    size: 8Gi
+    storageClass: ""
+  resources: {}
+
 rabbitmq:
   enabled: true
-  host: rabbitmq
-  port: 5672
+  image: rabbitmq:3.13-management
   username: guest
-  passwordSecretName: ""
-  passwordSecretKey: password
+  password: guest
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: ""
+  resources: {}
+
 kafka:
   enabled: false
+  image: bitnami/kafka:3.7.0
+  persistence:
+    enabled: false
+    size: 10Gi
+    storageClass: ""
+  resources: {}
 
 jaeger:
   enabled: true
+  image: jaegertracing/all-in-one:1.57
+  resources: {}
+
 langfuse:
   enabled: true
+  replicas: 1
+  image: langfuse/langfuse:2.14.1
+  publicUrl: http://localhost:3000
+  nextAuthSecret: changeme
+  salt: changeme
+  telemetryEnabled: "false"
+  resources: {}
 
 ingress:
   enabled: false

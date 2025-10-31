@@ -1,0 +1,26 @@
+{{- $root := . -}}
+{{- with $root.Values.orchestrator.hpa }}
+{{- if .enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "oss-ai-agent-tool.fullname" $root }}-orchestrator
+  labels:
+    {{- include "oss-ai-agent-tool.labels" $root | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "oss-ai-agent-tool.fullname" $root }}-orchestrator
+  minReplicas: {{ .min | default 2 }}
+  maxReplicas: {{ .max | default 10 }}
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: {{ .metricName | default "queue_depth" }}
+        target:
+          type: AverageValue
+          averageValue: {{ printf "%d" (.targetQueueDepth | default 5) }}
+{{- end }}
+{{- end }}

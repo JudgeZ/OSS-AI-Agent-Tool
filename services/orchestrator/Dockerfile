@@ -2,6 +2,7 @@
 
 FROM node:20-alpine AS deps
 WORKDIR /app
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 RUN npm ci
 
@@ -18,5 +19,6 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+USER node
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

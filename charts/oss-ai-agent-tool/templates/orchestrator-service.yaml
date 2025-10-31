@@ -5,11 +5,11 @@ metadata:
   labels:
     {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
 spec:
-  type: ClusterIP
+  type: {{ .Values.orchestrator.service.type | default "ClusterIP" }}
   selector:
     {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: orchestrator
   ports:
     - name: http
-      port: 4000
+      port: {{ .Values.orchestrator.service.port | default 4000 }}
       targetPort: http

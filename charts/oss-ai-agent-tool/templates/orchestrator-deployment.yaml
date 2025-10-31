@@ -1,3 +1,23 @@
+{{- $root := . -}}
+{{- $fullname := include "oss-ai-agent-tool.fullname" $root -}}
+{{- $postgresUser := $root.Values.postgres.username | default "ossaat" -}}
+{{- $postgresPassword := $root.Values.postgres.password | default "ossaat" -}}
+{{- $postgresDatabase := $root.Values.postgres.database | default "ossaat" -}}
+{{- $defaultOrchestratorEnv := dict }}
+{{- $_ := set $defaultOrchestratorEnv "RUN_MODE" $root.Values.runMode -}}
+{{- $_ := set $defaultOrchestratorEnv "REDIS_URL" (printf "redis://%s-redis:6379/0" $fullname) -}}
+{{- $_ := set $defaultOrchestratorEnv "POSTGRES_URL" (printf "postgres://%s:%s@%s-postgres:5432/%s" $postgresUser $postgresPassword $fullname $postgresDatabase) -}}
+{{- if $root.Values.rabbitmq.enabled -}}
+  {{- $_ := set $defaultOrchestratorEnv "RABBITMQ_URL" (printf "amqp://%s:%s@%s-rabbitmq:5672" ($root.Values.rabbitmq.username | default "guest") ($root.Values.rabbitmq.password | default "guest") $fullname) -}}
+{{- end -}}
+{{- if $root.Values.kafka.enabled -}}
+  {{- $_ := set $defaultOrchestratorEnv "KAFKA_BROKERS" (printf "%s-kafka:9092" $fullname) -}}
+{{- end -}}
+{{- $_ := set $defaultOrchestratorEnv "LANGFUSE_BASE_URL" (printf "http://%s-langfuse:3000" $fullname) -}}
+{{- $_ := set $defaultOrchestratorEnv "LANGFUSE_PUBLIC_KEY" "dev-public" -}}
+{{- $_ := set $defaultOrchestratorEnv "LANGFUSE_SECRET_KEY" "dev-secret" -}}
+{{- $_ := set $defaultOrchestratorEnv "OTEL_EXPORTER_OTLP_ENDPOINT" (printf "http://%s-jaeger:4317" $fullname) -}}
+{{- $orchestratorEnv := merge $defaultOrchestratorEnv ($root.Values.orchestrator.env | default dict) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,23 +36,55 @@ spec:
         {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: orchestrator
     spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: orchestrator
           image: {{ include "oss-ai-agent-tool.image" (dict "Values" .Values "Chart" .Chart "component" "orchestrator") }}
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - name: http
-              containerPort: 4000
+              containerPort: {{ .Values.orchestrator.containerPort | default 4000 }}
           env:
             - name: PORT
-              value: "4000"
-          {{- with .Values.orchestrator.env }}
-            {{- range $key, $value := . }}
+              value: {{ (.Values.orchestrator.containerPort | default 4000) | quote }}
+          {{- range $key, $value := $orchestratorEnv }}
             - name: {{ $key }}
               value: {{ $value | quote }}
-            {{- end }}
+          {{- end }}
+          {{- with .Values.orchestrator.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.orchestrator.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.orchestrator.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- else }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          {{- end }}
+          {{- with .Values.orchestrator.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- else }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
           {{- end }}

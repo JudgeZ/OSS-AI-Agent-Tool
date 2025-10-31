@@ -1,90 +1,92 @@
 version: "3.9"
 
+x-image: &image
+  registry: ${REGISTRY:-ghcr.io/yourorg/oss-ai-agent-tool}
+  tag: ${TAG:-latest}
+
 services:
   gateway:
-    build:
-      context: ./apps/gateway-api
-      dockerfile: Dockerfile
+    image: "${REGISTRY:-ghcr.io/yourorg/oss-ai-agent-tool}/gateway-api:${TAG:-latest}"
     environment:
+      PORT: "8080"
       ORCHESTRATOR_URL: http://orchestrator:4000
       INDEXER_URL: http://indexer:7070
-      PORT: "8080"
     ports:
       - "8080:8080"
     depends_on:
-      - orchestrator
+      orchestrator:
+        condition: service_started
     restart: unless-stopped
 
   orchestrator:
-    build:
-      context: ./services/orchestrator
-      dockerfile: Dockerfile
+    image: "${REGISTRY:-ghcr.io/yourorg/oss-ai-agent-tool}/orchestrator:${TAG:-latest}"
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: "4000"
-      RUN_MODE: consumer
+      RUN_MODE: ${RUN_MODE:-consumer}
       REDIS_URL: redis://redis:6379/0
-      POSTGRES_URL: postgres://ossaat:ossaat@postgres:5432/ossaat
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      POSTGRES_URL: postgres://ossaat:${POSTGRES_PASSWORD:-ossaat}@postgres:5432/ossaat
+      RABBITMQ_URL: amqp://guest:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       KAFKA_BROKERS: kafka:9092
       LANGFUSE_BASE_URL: http://langfuse:3000
-      LANGFUSE_PUBLIC_KEY: dev-public
-      LANGFUSE_SECRET_KEY: dev-secret
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-changeme}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-changeme}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     ports:
       - "4000:4000"
     depends_on:
-      - redis
-      - postgres
-      - rabbitmq
-      - kafka
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
     restart: unless-stopped
 
   indexer:
-    build:
-      context: ./services/indexer
-      dockerfile: Dockerfile
+    image: "${REGISTRY:-ghcr.io/yourorg/oss-ai-agent-tool}/indexer:${TAG:-latest}"
     environment:
       RUST_LOG: info
     ports:
       - "7070:7070"
     restart: unless-stopped
 
-  memory-svc:
-    image: node:20-alpine
-    working_dir: /workspace/services/memory-svc
-    command: ["tail", "-f", "/dev/null"]
-    volumes:
-      - ./:/workspace:delegated
-
   redis:
     image: redis/redis-stack-server:7.2.0-v9
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - redis-data:/data
+    restart: unless-stopped
 
   postgres:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: ossaat
-      POSTGRES_PASSWORD: ossaat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ossaat}
       POSTGRES_DB: ossaat
-    ports:
-      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ossaat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   rabbitmq:
     image: rabbitmq:3.13-management
     environment:
       RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     ports:
-      - "5672:5672"
       - "15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+    restart: unless-stopped
 
   kafka:
     image: bitnami/kafka:3.7.0
@@ -95,37 +97,38 @@ services:
       KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
       KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
       ALLOW_PLAINTEXT_LISTENER: "yes"
-    ports:
-      - "9092:9092"
     volumes:
       - kafka-data:/bitnami/kafka
+    restart: unless-stopped
 
   jaeger:
     image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
     ports:
       - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+    restart: unless-stopped
 
   langfuse:
     image: langfuse/langfuse:2.14.1
     environment:
-      DATABASE_URL: postgres://ossaat:ossaat@postgres:5432/ossaat
-      NEXTAUTH_SECRET: dev-secret
-      NEXTAUTH_URL: http://localhost:3000
-      SALT: dev-salt
+      DATABASE_URL: postgres://ossaat:${POSTGRES_PASSWORD:-ossaat}@postgres:5432/ossaat
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-replace-me}
+      NEXTAUTH_URL: ${LANGFUSE_PUBLIC_URL:-http://localhost:3000}
+      SALT: ${LANGFUSE_SALT:-replace-me}
       TELEMETRY_ENABLED: "false"
-    ports:
-      - "3000:3000"
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
+    ports:
+      - "3000:3000"
     volumes:
       - langfuse-data:/app/.langfuse
+    restart: unless-stopped
 
 volumes:
   postgres-data:

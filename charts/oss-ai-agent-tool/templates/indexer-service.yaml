@@ -1,0 +1,17 @@
+{{- if .Values.indexer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oss-ai-agent-tool.fullname" . }}-indexer
+  labels:
+    {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.indexer.service.type | default "ClusterIP" }}
+  selector:
+    {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: indexer
+  ports:
+    - name: http
+      port: {{ .Values.indexer.service.port | default 7070 }}
+      targetPort: http
+{{- end }}

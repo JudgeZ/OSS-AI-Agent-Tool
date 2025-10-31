@@ -1,0 +1,55 @@
+{{- if .Values.langfuse.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oss-ai-agent-tool.fullname" . }}-langfuse
+  labels:
+    {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse
+  ports:
+    - name: http
+      port: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oss-ai-agent-tool.fullname" . }}-langfuse
+  labels:
+    {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.langfuse.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: langfuse
+  template:
+    metadata:
+      labels:
+        {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: langfuse
+    spec:
+      containers:
+        - name: langfuse
+          image: {{ .Values.langfuse.image | default "langfuse/langfuse:2.14.1" }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.langfuse.databaseUrl | default (printf "postgres://%s:%s@%s-postgres:5432/ossaat" (.Values.postgres.username | default "ossaat") (.Values.postgres.password | default "ossaat") (include "oss-ai-agent-tool.fullname" .)) | quote }}
+            - name: NEXTAUTH_SECRET
+              value: {{ .Values.langfuse.nextAuthSecret | default "changeme" | quote }}
+            - name: NEXTAUTH_URL
+              value: {{ .Values.langfuse.publicUrl | default "http://localhost:3000" | quote }}
+            - name: SALT
+              value: {{ .Values.langfuse.salt | default "changeme" | quote }}
+            - name: TELEMETRY_ENABLED
+              value: {{ .Values.langfuse.telemetryEnabled | default "false" | quote }}
+          ports:
+            - containerPort: 3000
+          {{- with .Values.langfuse.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
