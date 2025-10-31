@@ -5,6 +5,7 @@
 {{- $postgresDatabase := $root.Values.postgres.database | default "ossaat" -}}
 {{- $defaultOrchestratorEnv := dict }}
 {{- $_ := set $defaultOrchestratorEnv "RUN_MODE" $root.Values.runMode -}}
+{{- $_ := set $defaultOrchestratorEnv "MESSAGE_BUS" ($root.Values.messaging.type | default "rabbitmq") -}}
 {{- $_ := set $defaultOrchestratorEnv "REDIS_URL" (printf "redis://%s-redis:6379/0" $fullname) -}}
 {{- $_ := set $defaultOrchestratorEnv "POSTGRES_URL" (printf "postgres://%s:%s@%s-postgres:5432/%s" $postgresUser $postgresPassword $fullname $postgresDatabase) -}}
 {{- if $root.Values.rabbitmq.enabled -}}
