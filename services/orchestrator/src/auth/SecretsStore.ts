@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Agent, type Dispatcher } from "undici";
 
@@ -25,7 +25,7 @@ export class LocalFileStore implements SecretsStore {
   private readonly keystore: LocalKeystore;
 
   constructor(options?: LocalStoreOptions) {
-    const defaultPath = path.join(homedir(), ".oss-orchestrator", "secrets.json");
+    const defaultPath = path.join(process.cwd(), "config", "secrets", "local", "secrets.json");
     this.filePath = options?.filePath ?? process.env.LOCAL_SECRETS_PATH ?? defaultPath;
     this.passphrase = options?.passphrase ?? process.env.LOCAL_SECRETS_PASSPHRASE ?? "";
     this.keystore = new LocalKeystore(this.filePath, this.passphrase);
@@ -53,6 +53,7 @@ export class LocalFileStore implements SecretsStore {
     if (!this.passphrase) {
       throw new Error("LocalFileStore requires LOCAL_SECRETS_PASSPHRASE to be set");
     }
+    await mkdir(path.dirname(this.filePath), { recursive: true });
     const existing = await this.keystore.read();
     this.cache = new Map(Object.entries(existing));
   }

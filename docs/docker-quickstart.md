@@ -28,15 +28,15 @@ EOF
 
 Edit `config/app.yaml` (or set environment variables) to match your provider credentials and messaging preferences. See [Configuration](./configuration.md) for the full schema.
 
-Set a passphrase for the local secrets keystore before you start the stack. The orchestrator stores encrypted provider tokens at `~/.oss-orchestrator/secrets.json` by default, so export the passphrase (or place it in a `.env` file consumed by Compose). The Compose file forwards these values into the orchestrator container:
+The orchestrator stores encrypted provider tokens at `config/secrets/local/secrets.json` (mounted as `/app/config/secrets/local/secrets.json` inside the container). `compose.dev.yaml` seeds a development-friendly passphrase (`dev-local-passphrase`) automatically. Override the passphrase and/or storage location by exporting environment variables (or by placing them in a `.env` file consumed by Compose):
 
 ```bash
-export LOCAL_SECRETS_PASSPHRASE="choose-a-strong-passphrase"
+# export LOCAL_SECRETS_PASSPHRASE="choose-a-strong-passphrase"
 # Optional: override the keystore location
-# export LOCAL_SECRETS_PATH="$HOME/.oss-orchestrator/custom-secrets.json"
+# export LOCAL_SECRETS_PATH="$(pwd)/config/secrets/local/secrets.json"
 ```
 
-If the passphrase is missing, the orchestrator container exits with `LocalFileStore requires LOCAL_SECRETS_PASSPHRASE to be set` during initialization.
+If the passphrase resolves to an empty string, the orchestrator container exits with `LocalFileStore requires LOCAL_SECRETS_PASSPHRASE to be set` during initialization.
 
 Key options for local Compose:
 
