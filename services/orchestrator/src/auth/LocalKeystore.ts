@@ -5,14 +5,16 @@ import { promisify } from "node:util";
 
 import nacl from "tweetnacl";
 
+type ScryptKdf = {
+  algorithm: "scrypt";
+  N: number;
+  r: number;
+  p: number;
+};
+
 type PersistedPayload = {
   version: number;
-  kdf: {
-    algorithm: "scrypt";
-    N: number;
-    r: number;
-    p: number;
-  };
+  kdf: ScryptKdf;
   salt: string;
   nonce: string;
   cipher: string;
@@ -30,9 +32,37 @@ type ScryptParameters = {
   p: number;
 };
 
-const SCRYPT_PARAMS = { N: 1 << 15, r: 8, p: 1, keyLength: 32 } as const;
+const KEY_LENGTH = 32;
+const SCRYPT_PARAMS = { N: 1 << 15, r: 8, p: 1 } as const;
 const SALT_LENGTH = 16;
 const scrypt = promisify(nodeScrypt);
+
+type Sodium = {
+  ready: Promise<void>;
+  crypto_pwhash: (
+    outputLength: number,
+    password: string | Uint8Array,
+    salt: Uint8Array,
+    opslimit: number,
+    memlimit: number,
+    algorithm: number
+  ) => Uint8Array;
+  crypto_pwhash_OPSLIMIT_MODERATE: number;
+  crypto_pwhash_MEMLIMIT_MODERATE: number;
+  crypto_pwhash_ALG_ARGON2ID13: number;
+};
+
+let sodiumInstance: Sodium | undefined;
+
+async function getSodium(): Promise<Sodium> {
+  if (!sodiumInstance) {
+    const module = await import("libsodium-wrappers-sumo");
+    const sodium = module.default as Sodium;
+    await sodium.ready;
+    sodiumInstance = sodium;
+  }
+  return sodiumInstance;
+}
 
 function encode(data: Uint8Array): string {
   return Buffer.from(data).toString("base64");
@@ -91,12 +121,10 @@ export class LocalKeystore {
       const raw = await fs.readFile(this.filePath, "utf-8");
       const parsed = JSON.parse(raw) as unknown;
       if (isPersistedPayload(parsed)) {
-        const { salt, nonce, cipher } = parsed;
-        const { N, r, p } = parsed.kdf;
-        return await this.decryptPayload({ salt, nonce, cipher }, { N, r, p });
+        return await this.decryptPersistedPayload(parsed);
       }
       if (isLegacyPayload(parsed)) {
-        return await this.decryptPayload(parsed);
+        return await this.decryptLegacyPayload(parsed);
       }
       throw new Error("Unsupported keystore payload format");
     } catch (error) {
@@ -113,7 +141,7 @@ export class LocalKeystore {
     await fs.mkdir(dir, { recursive: true });
     const salt = this.salt ?? randomBytes(SALT_LENGTH);
     this.salt = salt;
-    const key = await this.deriveKey(salt);
+    const key = await this.deriveScryptKey(salt);
     const nonce = randomBytes(nacl.secretbox.nonceLength);
     const plaintext = Buffer.from(JSON.stringify(values), "utf-8");
     const cipher = nacl.secretbox(new Uint8Array(plaintext), nonce, key);
@@ -127,29 +155,65 @@ export class LocalKeystore {
     await fs.writeFile(this.filePath, JSON.stringify(payload, null, 2), { mode: 0o600 });
   }
 
-  private async decryptPayload(payload: LegacyPayload, kdf?: ScryptParameters): Promise<Record<string, string>> {
+  private async decryptPersistedPayload(payload: PersistedPayload): Promise<Record<string, string>> {
+    const { salt: encodedSalt, nonce, cipher, kdf } = payload;
+    const salt = decode(encodedSalt);
+    this.salt = salt;
+    const key = await this.deriveScryptKey(salt, { N: kdf.N, r: kdf.r, p: kdf.p });
+    const decrypted = this.tryDecryptWithKey({ salt: encodedSalt, nonce, cipher }, key);
+    if (!decrypted) {
+      throw new Error("Failed to decrypt keystore");
+    }
+    return decrypted;
+  }
+
+  private async decryptLegacyPayload(payload: LegacyPayload): Promise<Record<string, string>> {
     const salt = decode(payload.salt);
     this.salt = salt;
-    const params = kdf ?? SCRYPT_PARAMS;
-    const key = await this.deriveKey(salt, params);
+    const scryptKey = await this.deriveScryptKey(salt);
+    const scryptResult = this.tryDecryptWithKey(payload, scryptKey);
+    if (scryptResult) {
+      return scryptResult;
+    }
+    const argonKey = await this.deriveLegacyArgon2Key(salt);
+    const argonResult = this.tryDecryptWithKey(payload, argonKey);
+    if (!argonResult) {
+      throw new Error("Failed to decrypt keystore");
+    }
+    return argonResult;
+  }
+
+  private tryDecryptWithKey(payload: LegacyPayload, key: Uint8Array): Record<string, string> | null {
     const nonce = decode(payload.nonce);
     const cipher = decode(payload.cipher);
     const plaintext = nacl.secretbox.open(cipher, nonce, key);
     if (!plaintext) {
-      throw new Error("Failed to decrypt keystore");
+      return null;
     }
     const json = Buffer.from(plaintext).toString("utf-8");
     const parsed = JSON.parse(json) as Record<string, string>;
     return parsed;
   }
 
-  private async deriveKey(salt: Uint8Array, params: ScryptParameters = SCRYPT_PARAMS): Promise<Uint8Array> {
-    const keyBuffer = (await scrypt(this.passphrase, Buffer.from(salt), SCRYPT_PARAMS.keyLength, {
+  private async deriveScryptKey(salt: Uint8Array, params: ScryptParameters = SCRYPT_PARAMS): Promise<Uint8Array> {
+    const keyBuffer = (await scrypt(this.passphrase, Buffer.from(salt), KEY_LENGTH, {
       N: params.N,
       r: params.r,
       p: params.p,
       maxmem: 64 * 1024 * 1024
     })) as Buffer;
     return new Uint8Array(keyBuffer);
+  }
+
+  private async deriveLegacyArgon2Key(salt: Uint8Array): Promise<Uint8Array> {
+    const sodium = await getSodium();
+    return sodium.crypto_pwhash(
+      KEY_LENGTH,
+      this.passphrase,
+      salt,
+      sodium.crypto_pwhash_OPSLIMIT_MODERATE,
+      sodium.crypto_pwhash_MEMLIMIT_MODERATE,
+      sodium.crypto_pwhash_ALG_ARGON2ID13
+    );
   }
 }
