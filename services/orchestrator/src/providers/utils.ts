@@ -14,7 +14,7 @@ export class ProviderError extends Error {
   readonly provider?: string;
   readonly retryable: boolean;
   readonly details?: { provider: string; message: string; status?: number }[];
-  override readonly cause?: unknown;
+  readonly cause?: unknown;
 
   constructor(message: string, options: {
     status?: number;

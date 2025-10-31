@@ -22,8 +22,14 @@ export type MistralProviderOptions = {
 };
 
 async function defaultClientFactory({ apiKey }: { apiKey: string }): Promise<MistralApiClient> {
-  const { MistralClient } = await import("@mistralai/mistralai");
-  return new MistralClient({ apiKey }) as unknown as MistralApiClient;
+  const mistralModule = await import("@mistralai/mistralai");
+  const moduleExports = mistralModule as Record<string, unknown>;
+  const ctorCandidate = moduleExports.MistralClient ?? moduleExports.default;
+  if (typeof ctorCandidate !== "function") {
+    throw new Error("Mistral client is not available");
+  }
+  const MistralConstructor = ctorCandidate as new (...args: any[]) => unknown;
+  return new MistralConstructor({ apiKey }) as unknown as MistralApiClient;
 }
 
 export class MistralProvider implements ModelProvider {

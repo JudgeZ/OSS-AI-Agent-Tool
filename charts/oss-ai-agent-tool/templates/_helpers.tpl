@@ -34,3 +34,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $component := .component -}}
 {{- printf "%s/%s:%s" $repo $component $tag -}}
 {{- end -}}
+
+{{- define "oss-ai-agent-tool.env" -}}
+{{- range $key, $value := . }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+{{- end -}}
+{{- end -}}

@@ -87,3 +87,5 @@ export function clearPlanHistory(): void {
   history.clear();
   emitter.removeAllListeners("plan.step");
 }
+
+export type { PlanStepEvent };

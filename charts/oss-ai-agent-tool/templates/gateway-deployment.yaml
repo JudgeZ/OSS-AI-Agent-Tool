@@ -1,3 +1,6 @@
+{{- $root := . -}}
+{{- $defaultGatewayEnv := dict "ORCHESTRATOR_URL" (printf "http://%s-orchestrator:%d" (include "oss-ai-agent-tool.fullname" $root) ($root.Values.orchestrator.service.port | default 4000)) "INDEXER_URL" (printf "http://%s-indexer:%d" (include "oss-ai-agent-tool.fullname" $root) ($root.Values.indexer.service.port | default 7070)) -}}
+{{- $gatewayEnv := merge $defaultGatewayEnv ($root.Values.gatewayApi.env | default dict) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,17 +19,55 @@ spec:
         {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: gateway-api
     spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: gateway-api
           image: {{ include "oss-ai-agent-tool.image" (dict "Values" .Values "Chart" .Chart "component" "gateway-api") }}
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: {{ .Values.gatewayApi.containerPort | default 8080 }}
           env:
             - name: PORT
-              value: "8080"
+              value: {{ (.Values.gatewayApi.containerPort | default 8080) | quote }}
+          {{- range $key, $value := $gatewayEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+          {{- end }}
+          {{- with .Values.gatewayApi.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.gatewayApi.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.gatewayApi.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- else }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          {{- end }}
+          {{- with .Values.gatewayApi.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- else }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
           {{- end }}

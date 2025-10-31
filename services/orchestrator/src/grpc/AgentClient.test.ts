@@ -1,4 +1,11 @@
-import { Server, ServerCredentials, status } from "@grpc/grpc-js";
+import {
+  Server,
+  ServerCredentials,
+  status,
+  type ServerUnaryCall,
+  type ServiceError,
+  type sendUnaryData
+} from "@grpc/grpc-js";
 import { beforeAll, afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { ToolAgentClient, ToolClientError, resetToolAgentClient } from "./AgentClient.js";
@@ -12,14 +19,23 @@ beforeAll(async () => {
   handler = async () => ({ events: [] });
   server = new Server();
   server.addService(AgentServiceService, {
-    executeTool: (call, callback) => {
+    executeTool: (
+      call: ServerUnaryCall<ExecuteToolRequest, ExecuteToolResponse>,
+      callback: sendUnaryData<ExecuteToolResponse>
+    ) => {
       handler(call.request)
         .then(response => callback(null, response))
         .catch(error => {
           if (error && typeof error === "object" && "code" in error) {
-            callback(error as any, null);
+            callback(error as ServiceError, null);
           } else {
-            callback({ code: status.UNKNOWN, message: (error as Error)?.message ?? "unknown" } as any, null);
+            callback(
+              {
+                code: status.UNKNOWN,
+                message: (error as Error | undefined)?.message ?? "unknown"
+              } as ServiceError,
+              null
+            );
           }
         });
     }
@@ -125,6 +141,7 @@ describe("ToolAgentClient", () => {
     });
 
     const events = await client.executeTool({
+      invocationId: "inv-retry",
       planId: "plan-retry",
       stepId: "step-1",
       tool: "test_runner",
@@ -156,6 +173,7 @@ describe("ToolAgentClient", () => {
 
     try {
       await client.executeTool({
+        invocationId: "inv-error",
         planId: "plan-fail",
         stepId: "s42",
         tool: "code_writer",

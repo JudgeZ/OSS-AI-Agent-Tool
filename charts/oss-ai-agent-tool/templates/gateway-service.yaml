@@ -5,11 +5,11 @@ metadata:
   labels:
     {{- include "oss-ai-agent-tool.labels" . | nindent 4 }}
 spec:
-  type: ClusterIP
+  type: {{ .Values.gatewayApi.service.type | default "ClusterIP" }}
   selector:
     {{- include "oss-ai-agent-tool.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: gateway-api
   ports:
     - name: http
-      port: 80
+      port: {{ .Values.gatewayApi.service.port | default 80 }}
       targetPort: http

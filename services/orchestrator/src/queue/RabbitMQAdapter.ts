@@ -1,4 +1,4 @@
-import amqplib, { type Channel, type Connection, type ConsumeMessage } from "amqplib";
+import amqplib, { type Channel, type ChannelModel, type ConsumeMessage } from "amqplib";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -54,7 +54,7 @@ function normaliseHeaders(headers: Record<string, unknown> | undefined): Record<
 }
 
 export class RabbitMQAdapter implements QueueAdapter {
-  private connection: Connection | null = null;
+  private connection: ChannelModel | null = null;
   private channel: Channel | null = null;
   private connecting: Promise<void> | null = null;
   private readonly consumers = new Map<string, QueueHandler<any>>();
@@ -147,9 +147,10 @@ export class RabbitMQAdapter implements QueueAdapter {
         const connection = await this.amqp.connect(this.url);
         this.connection = connection;
         connection.on("close", () => this.handleDisconnect());
-        connection.on("error", error => this.handleDisconnect(error));
+        connection.on("error", (error: unknown) => this.handleDisconnect(error));
         this.channel = await connection.createChannel();
-        await this.channel.prefetch(this.prefetch);
+        const channel = this.channel;
+        await channel.prefetch(this.prefetch);
         for (const [queue, handler] of this.consumers.entries()) {
           await this.setupConsumer(queue, handler);
         }
@@ -199,7 +200,7 @@ export class RabbitMQAdapter implements QueueAdapter {
     await channel.assertQueue(queue, { durable: true });
     await channel.consume(
       queue,
-      msg => this.handleMessage(queue, handler, msg),
+      (msg: ConsumeMessage | null) => this.handleMessage(queue, handler, msg),
       { noAck: false }
     );
   }

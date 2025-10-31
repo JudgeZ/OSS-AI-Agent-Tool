@@ -204,7 +204,7 @@ export class VaultStore implements SecretsStore {
     if (this.namespace) {
       headers.set("X-Vault-Namespace", this.namespace);
     }
-    const requestInit: RequestInit = {
+    const requestInit: RequestInit & { dispatcher?: Dispatcher } = {
       ...init,
       headers,
       dispatcher: this.dispatcher

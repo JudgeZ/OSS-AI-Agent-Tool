@@ -35,6 +35,10 @@ export function createServer(): Express {
   app.use(express.json({ limit: "1mb" }));
   app.use(morgan("dev"));
 
+  app.get("/healthz", (_req: Request, res: Response) => {
+    res.status(200).json({ status: "ok" });
+  });
+
   app.get("/auth/:provider/authorize", oauthAuthorize);
   app.post("/auth/:provider/callback", oauthCallback);
 
