@@ -14,11 +14,25 @@ Local-first, auditable, multi-agent coding assistant with a desktop GUI.
 
 ## Quick start (dev)
 ```bash
-docker compose -f compose.dev.yaml up -d
-npm --workspace services/orchestrator install
-npm --workspace services/orchestrator run dev
-go run ./apps/gateway-api
+docker compose -f compose.dev.yaml up --build
 ```
+
+The development Compose file builds the in-repo services and starts the full dependency stack:
+
+| Service | Container command | Notes |
+| --- | --- | --- |
+| `gateway` | `/gateway-api` | Waits on the orchestrator container before accepting requests. |
+| `orchestrator` | `node dist/index.js` | Requires Redis, Postgres, RabbitMQ, and Kafka to be reachable. |
+| `indexer` | `/app/indexer` | Independent Rust service providing repository insights. |
+| `memory-svc` | `tail -f /dev/null` | Utility workspace container for building the future memory service implementation. |
+| `redis` | Image default (`redis-stack-server`) | Provides cache + vector store features consumed by the orchestrator. |
+| `postgres` | Image default (`docker-entrypoint.sh postgres`) | Backing relational datastore for orchestrator + Langfuse. |
+| `rabbitmq` | Image default (`docker-entrypoint.sh rabbitmq-server`) | Message queue for the outer loop. |
+| `kafka` | Image default (`/opt/bitnami/scripts/kafka/run.sh`) | Kafka (KRaft mode) for event fan-out. |
+| `jaeger` | Image default (`/go/bin/all-in-one`) | OTLP collector and UI for traces. |
+| `langfuse` | Image default (`docker-entrypoint.sh start`) | Observability dashboard for LLM interactions. |
+
+Visit [Docker Quickstart](./docs/docker-quickstart.md) for credentials, health checks, and optional profiles.
 
 ## New: Consumer ↔ Enterprise flexibility
 - Message bus: **RabbitMQ** or **Kafka** (toggle in Helm values).
