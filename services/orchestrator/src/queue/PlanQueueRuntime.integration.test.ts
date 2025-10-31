@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
 
 import type {
   EnqueueOptions,
@@ -14,6 +15,8 @@ import type {
   RetryOptions
 } from "./QueueAdapter.js";
 import type { PlanStepEvent } from "../plan/events.js";
+type EventsModule = typeof import("../plan/events.js");
+type PublishSpy = Mock<EventsModule["publishPlanStepEvent"]>;
 
 class MockEnvelope<T> {
   constructor(
@@ -177,8 +180,8 @@ describe("PlanQueueRuntime integration", () => {
   let storeDir: string;
   let storePath: string;
   let runtime: typeof import("./PlanQueueRuntime.js");
-  let eventsModule: typeof import("../plan/events.js");
-  let publishSpy: ReturnType<typeof vi.spyOn> | undefined;
+  let eventsModule: EventsModule;
+  let publishSpy!: PublishSpy;
 
   beforeAll(async () => {
     runtime = await import("./PlanQueueRuntime.js");
@@ -192,11 +195,11 @@ describe("PlanQueueRuntime integration", () => {
     storePath = path.join(storeDir, "state.json");
     process.env.PLAN_STATE_PATH = storePath;
     runtime.resetPlanQueueRuntime();
-    publishSpy = vi.spyOn(eventsModule as any, "publishPlanStepEvent");
+    publishSpy = vi.spyOn(eventsModule, "publishPlanStepEvent");
   });
 
   afterEach(async () => {
-    publishSpy?.mockRestore?.();
+    publishSpy.mockRestore();
     await fs.rm(storeDir, { recursive: true, force: true });
   });
 
@@ -228,16 +231,16 @@ describe("PlanQueueRuntime integration", () => {
 
     await runtime.submitPlanSteps(plan, "trace-1");
     await vi.waitFor(() => expect(executeToolMock).toHaveBeenCalledTimes(1), { timeout: 1000 });
-    const calls = (publishSpy?.mock.calls ?? []) as Array<[PlanStepEvent]>;
+    const calls = publishSpy.mock.calls as Array<[PlanStepEvent]>;
     expect(calls.some(([event]) => event.step.state === "running")).toBe(true);
 
     adapterRef.current.simulateDisconnect();
     runtime.resetPlanQueueRuntime();
 
-    publishSpy?.mockClear?.();
+    publishSpy.mockClear();
     await runtime.initializePlanQueueRuntime();
-    expect(publishSpy!).toHaveBeenCalled();
-    const replayCalls = (publishSpy?.mock.calls ?? []) as Array<[PlanStepEvent]>;
+    expect(publishSpy).toHaveBeenCalled();
+    const replayCalls = publishSpy.mock.calls as Array<[PlanStepEvent]>;
     const firstCall = replayCalls[0]?.[0];
     expect(firstCall?.step.state).toBe("running");
 
@@ -248,7 +251,7 @@ describe("PlanQueueRuntime integration", () => {
     const remaining = await persisted.listActiveSteps();
     expect(remaining).toHaveLength(0);
 
-    const finalCalls = (publishSpy?.mock.calls ?? []) as Array<[PlanStepEvent]>;
+    const finalCalls = publishSpy.mock.calls as Array<[PlanStepEvent]>;
     expect(finalCalls.some(([event]) => event.step.state === "completed")).toBe(true);
   });
 });
