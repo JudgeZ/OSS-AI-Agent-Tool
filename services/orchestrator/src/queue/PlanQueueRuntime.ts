@@ -38,6 +38,16 @@ let initialized: Promise<void> | null = null;
 
 const TERMINAL_STATES = new Set<ToolEvent["state"]>(["completed", "failed"]);
 
+export async function persistPlanStepState(
+  planId: string,
+  stepId: string,
+  state: ToolEvent["state"],
+  summary?: string,
+  output?: Record<string, unknown>
+): Promise<void> {
+  await planStateStore?.setState(planId, stepId, state, summary, output);
+}
+
 async function emitPlanEvent(
   planId: string,
   step: PlanStep,
