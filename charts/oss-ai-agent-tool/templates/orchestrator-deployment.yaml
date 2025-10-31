@@ -66,9 +66,6 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      volumes:
-        - name: plan-state
-          emptyDir: {}
           {{- with .Values.orchestrator.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -95,3 +92,6 @@ spec:
             initialDelaySeconds: 2
             periodSeconds: 10
           {{- end }}
+      volumes:
+        - name: plan-state
+          emptyDir: {}
