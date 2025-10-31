@@ -2,6 +2,25 @@
   "name": "@oss/orchestrator",
   "version": "0.1.0",
   "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./plan": {
+      "require": "./dist/plan/index.js",
+      "default": "./dist/plan/index.js"
+    },
+    "./plan/planner": {
+      "require": "./dist/plan/planner.js",
+      "default": "./dist/plan/planner.js"
+    }
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -38,7 +57,6 @@
     "@types/supertest": "^2.0.16",
     "cross-spawn": "^7.0.5",
     "supertest": "^7.1.4",
-    "cross-spawn": "^7.0.5",
     "ts-proto": "^1.180.0",
     "tsx": "^4.7.0",
     "typescript": "^5.4.5",
