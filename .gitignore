@@ -1,4 +1,4 @@
 node_modules/
 dist/
 target/
-config/secrets/
+**/config/secrets/
