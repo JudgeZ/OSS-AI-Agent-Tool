@@ -36,6 +36,14 @@ function getProviderConfig(provider: string): ProviderConfig | undefined {
       clientSecret: process.env.OPENROUTER_CLIENT_SECRET,
       redirectUri: `${redirectBase}/auth/openrouter/callback`,
       extraParams: { grant_type: "authorization_code" }
+    },
+    google: {
+      name: "google",
+      tokenUrl: "https://oauth2.googleapis.com/token",
+      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      redirectUri: `${redirectBase}/auth/google/callback`,
+      extraParams: { grant_type: "authorization_code" }
     }
   };
 
@@ -81,9 +89,16 @@ export async function callback(req: Request, res: Response) {
   try {
     const tokens = await exchangeCodeForTokens(cfg, code, codeVerifier);
     const store = secrets();
+    const normalizedTokens: TokenResponse & { expires_at?: number } = { ...tokens };
+    if (typeof tokens.expires_in === "number") {
+      normalizedTokens.expires_at = Date.now() + tokens.expires_in * 1000;
+    }
     await Promise.all([
       store.set(`oauth:${provider}:access_token`, tokens.access_token),
-      store.set(`oauth:${provider}:tokens`, JSON.stringify(tokens))
+      store.set(`oauth:${provider}:tokens`, JSON.stringify(normalizedTokens)),
+      tokens.refresh_token
+        ? store.set(`oauth:${provider}:refresh_token`, tokens.refresh_token)
+        : store.delete(`oauth:${provider}:refresh_token`)
     ]);
     res.json({ ok: true });
   } catch (error) {
