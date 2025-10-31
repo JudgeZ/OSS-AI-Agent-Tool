@@ -78,20 +78,35 @@ function asStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
-  const parsed = value
+  return value
     .filter(item => typeof item === "string")
     .map(item => item.trim())
     .filter(item => item.length > 0);
-  return parsed.length > 0 ? parsed : undefined;
+}
+
+let legacyMessageBusWarningIssued = false;
+
+function warnLegacyMessageBus(value: string | undefined): void {
+  if (legacyMessageBusWarningIssued || !value) {
+    return;
+  }
+  legacyMessageBusWarningIssued = true;
+  // eslint-disable-next-line no-console
+  console.warn("MESSAGE_BUS is deprecated; use MESSAGING_TYPE instead");
+}
+
+export function __resetLegacyMessagingWarningForTests(): void {
+  legacyMessageBusWarningIssued = false;
 }
 
 export function loadConfig(): AppConfig {
   const cfgPath = process.env.APP_CONFIG || path.join(process.cwd(), "config", "app.yaml");
   let fileCfg: PartialAppConfig = {};
-  try {
-    if (fs.existsSync(cfgPath)) {
-      const raw = YAML.parse(fs.readFileSync(cfgPath, "utf-8"));
-      const doc = asRecord(raw);
+  if (fs.existsSync(cfgPath)) {
+    try {
+      const rawFile = fs.readFileSync(cfgPath, "utf-8");
+      const parsed = YAML.parse(rawFile);
+      const doc = asRecord(parsed);
       if (doc) {
         const messaging = asRecord(doc.messaging);
         const providers = asRecord(doc.providers);
@@ -103,10 +118,16 @@ export function loadConfig(): AppConfig {
         fileCfg = {
           runMode: asRunMode(doc.runMode),
           messaging: messaging ? { type: asMessagingType(messaging.type) } : undefined,
-          providers: {
-            defaultRoute: asDefaultRoute(providers?.defaultRoute),
-            enabled: asStringArray(providers?.enabled)
-          },
+          providers: providers
+            ? {
+                defaultRoute: asDefaultRoute(providers.defaultRoute),
+                enabled: Array.isArray(providers.enabled)
+                  ? asStringArray(providers.enabled) ?? []
+                  : providers.enabled === undefined
+                  ? undefined
+                  : []
+              }
+            : undefined,
           auth: oauth
             ? {
                 oauth: {
@@ -124,12 +145,22 @@ export function loadConfig(): AppConfig {
             : undefined
         };
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to parse configuration file at ${cfgPath}: ${message}`);
     }
-  } catch {}
+  }
 
   const envRunMode = asRunMode(process.env.RUN_MODE);
-  const envMessageType =
-    asMessagingType(process.env.MESSAGING_TYPE) ?? asMessagingType(process.env.MESSAGE_BUS);
+  let envMessageType = asMessagingType(process.env.MESSAGING_TYPE);
+  const rawLegacyMessageBus = process.env.MESSAGE_BUS;
+  if (!envMessageType && rawLegacyMessageBus !== undefined) {
+    const legacyValue = asMessagingType(rawLegacyMessageBus);
+    if (legacyValue) {
+      envMessageType = legacyValue;
+    }
+    warnLegacyMessageBus(rawLegacyMessageBus);
+  }
   const envProviders = process.env.PROVIDERS;
   const envRedirectBaseUrl = process.env.OAUTH_REDIRECT_BASE;
   const envSecretsBackend = asSecretsBackend(process.env.SECRETS_BACKEND);
@@ -137,7 +168,7 @@ export function loadConfig(): AppConfig {
   const envAgentRetries = asNumber(process.env.TOOL_AGENT_RETRIES);
   const envAgentTimeout = asNumber(process.env.TOOL_AGENT_TIMEOUT_MS);
 
-  const providersEnabledFromEnv = envProviders
+  const providersEnabledFromEnv = envProviders !== undefined
     ? envProviders
         .split(",")
         .map(entry => entry.trim())
@@ -146,14 +177,21 @@ export function loadConfig(): AppConfig {
 
   const providersEnabledFromFile = fileCfg.providers?.enabled;
 
+  const runMode = fileCfg.runMode ?? envRunMode ?? DEFAULT_CONFIG.runMode;
+
+  const secretsDefault = runMode === "enterprise" ? "vault" : DEFAULT_CONFIG.secrets.backend;
+  const providersEnabledDefault = DEFAULT_CONFIG.providers.enabled;
+  const envEnabled = providersEnabledFromEnv?.map(provider => provider);
+  const fileEnabled = providersEnabledFromFile?.map(provider => provider);
+
   return {
-    runMode: fileCfg.runMode ?? envRunMode ?? DEFAULT_CONFIG.runMode,
+    runMode,
     messaging: {
       type: fileCfg.messaging?.type ?? envMessageType ?? DEFAULT_CONFIG.messaging.type
     },
     providers: {
       defaultRoute: fileCfg.providers?.defaultRoute ?? DEFAULT_CONFIG.providers.defaultRoute,
-      enabled: providersEnabledFromEnv ?? providersEnabledFromFile ?? DEFAULT_CONFIG.providers.enabled
+      enabled: envEnabled ?? fileEnabled ?? [...providersEnabledDefault]
     },
     auth: {
       oauth: {
@@ -164,7 +202,7 @@ export function loadConfig(): AppConfig {
       }
     },
     secrets: {
-      backend: envSecretsBackend ?? fileCfg.secrets?.backend ?? DEFAULT_CONFIG.secrets.backend
+      backend: envSecretsBackend ?? fileCfg.secrets?.backend ?? secretsDefault
     },
     tooling: {
       agentEndpoint: envAgentEndpoint ?? fileCfg.tooling?.agentEndpoint ?? DEFAULT_CONFIG.tooling.agentEndpoint,

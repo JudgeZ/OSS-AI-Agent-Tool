@@ -73,7 +73,7 @@ Approvals required for repo.write and network.egress in consumer mode; enterpris
 
 All steps are idempotent and time‑bounded; retries use exponential backoff; circuit breakers on external calls.
 
-Stream progress to the UI (SSE) with state transitions: queued → running → waiting_approval → completed|failed.
+Stream progress to the UI (SSE) with state transitions: waiting_approval → approved → queued → running → completed|failed (non-approval steps start directly at `queued`).
 
 Plan JSON (canonical excerpt)
 
