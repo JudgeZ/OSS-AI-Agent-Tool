@@ -113,7 +113,16 @@ export async function submitPlanSteps(plan: Plan, traceId: string): Promise<void
   const submissions = plan.steps.map(async step => {
     const key = `${plan.id}:${step.id}`;
     stepRegistry.set(key, { step, traceId });
-    await planStateStore?.rememberStep(plan.id, step, traceId);
+    if (step.approvalRequired) {
+      await planStateStore?.rememberStep(plan.id, step, traceId, "waiting_approval");
+      await emitPlanEvent(plan.id, step, traceId, {
+        state: "waiting_approval",
+        summary: "Awaiting approval"
+      });
+      return;
+    }
+
+    await planStateStore?.rememberStep(plan.id, step, traceId, "queued");
     await emitPlanEvent(plan.id, step, traceId, {
       state: "queued",
       summary: "Queued for execution"
@@ -125,6 +134,54 @@ export async function submitPlanSteps(plan: Plan, traceId: string): Promise<void
   });
 
   await Promise.all(submissions);
+  const depth = await adapter.getQueueDepth(PLAN_STEPS_QUEUE);
+  queueDepthGauge.labels(PLAN_STEPS_QUEUE).set(depth);
+}
+
+type ApprovalDecision = "approved" | "rejected";
+
+export async function resolvePlanStepApproval(options: {
+  planId: string;
+  stepId: string;
+  decision: ApprovalDecision;
+  summary?: string;
+}): Promise<void> {
+  const { planId, stepId, decision, summary } = options;
+  await initializePlanQueueRuntime();
+  const key = `${planId}:${stepId}`;
+
+  let metadata = stepRegistry.get(key);
+  if (!metadata) {
+    const persisted = await planStateStore?.getStep(planId, stepId);
+    if (persisted) {
+      metadata = { step: persisted.step, traceId: persisted.traceId };
+      stepRegistry.set(key, metadata);
+    }
+  }
+
+  if (!metadata) {
+    throw new Error(`Plan step ${planId}/${stepId} is not available`);
+  }
+
+  const { step, traceId } = metadata;
+  const decisionSummary = summary ?? (decision === "approved" ? "Approved for execution" : "Step rejected");
+
+  if (decision === "rejected") {
+    await emitPlanEvent(planId, step, traceId, { state: "rejected", summary: decisionSummary });
+    stepRegistry.delete(key);
+    return;
+  }
+
+  const adapter = await getQueueAdapter();
+
+  await emitPlanEvent(planId, step, traceId, { state: "approved", summary: decisionSummary });
+  await emitPlanEvent(planId, step, traceId, { state: "queued", summary: decisionSummary });
+
+  await adapter.enqueue<PlanStepTaskPayload>(PLAN_STEPS_QUEUE, { planId, step, traceId }, {
+    idempotencyKey: key,
+    headers: { "trace-id": traceId }
+  });
+
   const depth = await adapter.getQueueDepth(PLAN_STEPS_QUEUE);
   queueDepthGauge.labels(PLAN_STEPS_QUEUE).set(depth);
 }

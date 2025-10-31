@@ -240,4 +240,103 @@ describe("PlanQueueRuntime integration", () => {
 
     expect(publishSpy.mock.calls.some(([event]) => event.step.state === "completed")).toBe(true);
   });
+
+  it("queues approval-gated steps only after approval is granted", async () => {
+    const plan = {
+      id: "plan-approval",
+      goal: "approval demo",
+      steps: [
+        {
+          id: "s1",
+          action: "apply_edits",
+          capability: "repo.write",
+          capabilityLabel: "Apply repository changes",
+          labels: ["repo"],
+          tool: "code_writer",
+          timeoutSeconds: 300,
+          approvalRequired: true,
+          input: {},
+          metadata: {}
+        }
+      ],
+      successCriteria: ["ok"]
+    };
+
+    executeToolMock.mockResolvedValueOnce([
+      { state: "completed", summary: "Completed run", planId: plan.id, stepId: "s1", invocationId: "inv-1" }
+    ]);
+
+    await runtime.submitPlanSteps(plan, "trace-approval");
+
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(publishSpy.mock.calls.some(([event]) => event.step.state === "waiting_approval")).toBe(true);
+    expect(await adapterRef.current.getQueueDepth(runtime.PLAN_STEPS_QUEUE)).toBe(0);
+
+    await runtime.resolvePlanStepApproval({
+      planId: plan.id,
+      stepId: "s1",
+      decision: "approved",
+      summary: "Looks good"
+    });
+
+    const states = publishSpy.mock.calls
+      .filter(([event]) => event.step.id === "s1")
+      .map(([event]) => event.step.state);
+    expect(states).toContain("approved");
+    expect(states).toContain("queued");
+
+    await vi.waitFor(() => expect(executeToolMock).toHaveBeenCalledTimes(1), { timeout: 1000 });
+
+    expect(publishSpy.mock.calls.some(([event]) => event.step.state === "completed")).toBe(true);
+  });
+
+  it("rehydrates approval-gated steps without dispatching them", async () => {
+    const plan = {
+      id: "plan-wait",
+      goal: "approval hold",
+      steps: [
+        {
+          id: "s-wait",
+          action: "apply_edits",
+          capability: "repo.write",
+          capabilityLabel: "Apply repository changes",
+          labels: ["repo"],
+          tool: "code_writer",
+          timeoutSeconds: 300,
+          approvalRequired: true,
+          input: {},
+          metadata: {}
+        }
+      ],
+      successCriteria: ["ok"]
+    };
+
+    await runtime.submitPlanSteps(plan, "trace-wait");
+    expect(executeToolMock).not.toHaveBeenCalled();
+
+    runtime.resetPlanQueueRuntime();
+    publishSpy.mockClear();
+    executeToolMock.mockReset();
+    executeToolMock.mockResolvedValueOnce([
+      { state: "completed", summary: "Approved run", planId: plan.id, stepId: "s-wait", invocationId: "inv-wait" }
+    ]);
+
+    await runtime.initializePlanQueueRuntime();
+
+    expect(
+      publishSpy.mock.calls.some(([event]) => event.step.id === "s-wait" && event.step.state === "waiting_approval")
+    ).toBe(true);
+    expect(executeToolMock).not.toHaveBeenCalled();
+
+    await runtime.resolvePlanStepApproval({
+      planId: plan.id,
+      stepId: "s-wait",
+      decision: "approved",
+      summary: "Resume"
+    });
+
+    await vi.waitFor(() => expect(executeToolMock).toHaveBeenCalledTimes(1), { timeout: 1000 });
+
+    expect(publishSpy.mock.calls.some(([event]) => event.step.id === "s-wait" && event.step.state === "completed")).toBe(true);
+  });
 });

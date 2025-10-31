@@ -61,4 +61,18 @@ describe("PlanStateStore", () => {
     const pending = await store.listActiveSteps();
     expect(pending).toHaveLength(0);
   });
+
+  it("remembers waiting approval state when provided", async () => {
+    const store = new PlanStateStore({ filePath: storePath });
+    await store.rememberStep(
+      "plan-approval",
+      { ...sampleStep, approvalRequired: true },
+      "trace-approval",
+      "waiting_approval"
+    );
+
+    const pending = await store.listActiveSteps();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.state).toBe("waiting_approval");
+  });
 });

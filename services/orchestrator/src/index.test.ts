@@ -15,7 +15,8 @@ vi.mock("./providers/ProviderRegistry.js", () => {
 vi.mock("./queue/PlanQueueRuntime.js", () => {
   return {
     initializePlanQueueRuntime: vi.fn().mockResolvedValue(undefined),
-    submitPlanSteps: vi.fn().mockResolvedValue(undefined)
+    submitPlanSteps: vi.fn().mockResolvedValue(undefined),
+    resolvePlanStepApproval: vi.fn().mockResolvedValue(undefined)
   };
 });
 
@@ -90,9 +91,13 @@ describe("orchestrator http api", () => {
         .send({ decision: "approve", rationale: "Looks good" })
         .expect(204);
 
-      const events = getPlanHistory(planId).filter(event => event.step.id === approvalStep.id);
-      expect(events[events.length - 1].step.state).toBe("approved");
-      expect(events[events.length - 1].step.summary).toContain("Looks good");
+      const { resolvePlanStepApproval } = await import("./queue/PlanQueueRuntime.js");
+      expect(resolvePlanStepApproval).toHaveBeenCalledWith({
+        planId,
+        stepId: approvalStep.id,
+        decision: "approved",
+        summary: expect.stringContaining("Looks good")
+      });
     });
 
     it("publishes rejection events when a pending step is rejected", async () => {
@@ -129,9 +134,13 @@ describe("orchestrator http api", () => {
         .send({ decision: "reject", rationale: "Needs work" })
         .expect(204);
 
-      const events = getPlanHistory(planId).filter(event => event.step.id === approvalStep.id);
-      expect(events[events.length - 1].step.state).toBe("rejected");
-      expect(events[events.length - 1].step.summary).toContain("Needs work");
+      const { resolvePlanStepApproval } = await import("./queue/PlanQueueRuntime.js");
+      expect(resolvePlanStepApproval).toHaveBeenCalledWith({
+        planId,
+        stepId: approvalStep.id,
+        decision: "rejected",
+        summary: expect.stringContaining("Needs work")
+      });
     });
 
     it("returns a conflict when the step is not awaiting approval", async () => {
