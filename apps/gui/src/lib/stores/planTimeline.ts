@@ -20,9 +20,13 @@ export interface PlanStep {
   id: string;
   action: string;
   capability: string;
+  capabilityLabel: string;
+  tool: string;
+  labels: string[];
+  timeoutSeconds: number;
   state: StepState;
   summary?: string;
-  approvalRequired?: boolean;
+  approvalRequired: boolean;
   history: StepHistoryEntry[];
 }
 
@@ -51,10 +55,15 @@ interface StepEventPayload {
   step: {
     id: string;
     action?: string;
+    tool?: string;
     capability: string;
+    capability_label?: string;
+    labels?: string[];
     state: StepState;
     summary?: string;
-    approval?: boolean;
+    approval_required?: boolean;
+    timeoutSeconds?: number;
+    timeout_seconds?: number;
     transitioned_at?: string;
   };
 }
@@ -70,13 +79,23 @@ function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineSt
   const historyEntry = toHistoryEntry(payload.step);
   const steps = [...state.steps];
   const existingIndex = steps.findIndex((step) => step.id === payload.step.id);
-  const approvalRequired = Boolean(payload.step.approval);
+  const approvalRequired = Boolean(payload.step.approval_required);
+  const timeoutSeconds =
+    typeof payload.step.timeoutSeconds === 'number'
+      ? payload.step.timeoutSeconds
+      : typeof payload.step.timeout_seconds === 'number'
+      ? payload.step.timeout_seconds
+      : undefined;
 
   if (existingIndex === -1) {
     steps.push({
       id: payload.step.id,
       action: payload.step.action ?? payload.step.id,
       capability: payload.step.capability,
+      capabilityLabel: payload.step.capability_label ?? payload.step.capability,
+      tool: payload.step.tool ?? payload.step.action ?? payload.step.id,
+      labels: payload.step.labels ?? [],
+      timeoutSeconds: timeoutSeconds ?? 0,
       state: payload.step.state,
       summary: payload.step.summary,
       approvalRequired,
@@ -90,6 +109,10 @@ function upsertStep(state: TimelineState, payload: StepEventPayload): TimelineSt
       ...existing,
       action: payload.step.action ?? existing.action,
       capability: payload.step.capability ?? existing.capability,
+      capabilityLabel: payload.step.capability_label ?? existing.capabilityLabel ?? existing.capability,
+      tool: payload.step.tool ?? existing.tool,
+      labels: payload.step.labels ?? existing.labels,
+      timeoutSeconds: timeoutSeconds ?? existing.timeoutSeconds,
       state: payload.step.state,
       summary: payload.step.summary ?? existing.summary,
       approvalRequired: approvalRequired || existing.approvalRequired,

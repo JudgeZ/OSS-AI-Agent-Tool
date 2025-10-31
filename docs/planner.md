@@ -28,10 +28,28 @@ Response body:
     "id": "plan-a1b2c3d4",
     "goal": "Ship the next milestone",
     "steps": [
-      { "id": "s1", "action": "index_repo", "capability": "repo.read", "timeout_s": 300, "approval": false },
-      { "id": "s2", "action": "apply_changes", "capability": "repo.write", "timeout_s": 900, "approval": true }
+      {
+        "id": "s1",
+        "action": "index_repo",
+        "tool": "repo_indexer",
+        "capability": "repo.read",
+        "capabilityLabel": "Read repository",
+        "labels": ["repo", "automation"],
+        "timeoutSeconds": 300,
+        "approvalRequired": false
+      },
+      {
+        "id": "s2",
+        "action": "apply_changes",
+        "tool": "code_writer",
+        "capability": "repo.write",
+        "capabilityLabel": "Apply repository changes",
+        "labels": ["repo", "automation", "approval"],
+        "timeoutSeconds": 900,
+        "approvalRequired": true
+      }
     ],
-    "success_criteria": ["All tests pass", "CI green", "Docs updated"]
+    "successCriteria": ["All tests pass", "CI green", "Docs updated"]
   },
   "traceId": "07f1d186-4f07-4b40-9265-6a51f78fbdfa"
 }
@@ -61,7 +79,7 @@ Sample event payload:
 
 ```text
 event: plan.step
-data: {"event":"plan.step","traceId":"07f1d186-4f07-4b40-9265-6a51f78fbdfa","planId":"plan-a1b2c3d4","step":{"id":"s2","state":"queued","capability":"repo.write","timeout_s":900,"approval":true}}
+data: {"event":"plan.step","traceId":"07f1d186-4f07-4b40-9265-6a51f78fbdfa","planId":"plan-a1b2c3d4","step":{"id":"s2","action":"apply_changes","tool":"code_writer","state":"queued","capability":"repo.write","capabilityLabel":"Apply repository changes","labels":["repo","automation","approval"],"timeoutSeconds":900,"approvalRequired":true}}
 ```
 
 For test automation or scripting scenarios, sending `Accept: application/json` returns a JSON object with the accumulated events instead of holding the connection open.
@@ -74,9 +92,12 @@ Each step surfaces the capability it exercises, the execution timeout, and wheth
 {
   "id": "s2",
   "action": "apply_changes",
+  "tool": "code_writer",
   "capability": "repo.write",
-  "timeout_s": 900,
-  "approval": true
+  "capabilityLabel": "Apply repository changes",
+  "labels": ["repo", "automation", "approval"],
+  "timeoutSeconds": 900,
+  "approvalRequired": true
 }
 ```
 

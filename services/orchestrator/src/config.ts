@@ -11,6 +11,11 @@ export type AppConfig = {
   };
   auth: { oauth: { redirectBaseUrl: string } };
   secrets: { backend: "localfile" | "vault" };
+  tooling: {
+    agentEndpoint: string;
+    retryAttempts: number;
+    defaultTimeoutMs: number;
+  };
 };
 
 type PartialAppConfig = {
@@ -19,6 +24,7 @@ type PartialAppConfig = {
   providers?: Partial<AppConfig["providers"]>;
   auth?: { oauth?: Partial<AppConfig["auth"]["oauth"]> };
   secrets?: Partial<AppConfig["secrets"]>;
+  tooling?: Partial<AppConfig["tooling"]>;
 };
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -29,7 +35,12 @@ const DEFAULT_CONFIG: AppConfig = {
     enabled: ["openai", "local_ollama"]
   },
   auth: { oauth: { redirectBaseUrl: "http://127.0.0.1:8080" } },
-  secrets: { backend: "localfile" }
+  secrets: { backend: "localfile" },
+  tooling: {
+    agentEndpoint: "127.0.0.1:50051",
+    retryAttempts: 3,
+    defaultTimeoutMs: 15000
+  }
 };
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -50,6 +61,17 @@ function asDefaultRoute(value: unknown): AppConfig["providers"]["defaultRoute"] 
 
 function asSecretsBackend(value: unknown): AppConfig["secrets"]["backend"] | undefined {
   return value === "localfile" || value === "vault" ? value : undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function asStringArray(value: unknown): string[] | undefined {
@@ -76,6 +98,7 @@ export function loadConfig(): AppConfig {
         const auth = asRecord(doc.auth);
         const oauth = asRecord(auth?.oauth);
         const secrets = asRecord(doc.secrets);
+        const tooling = asRecord(doc.tooling);
 
         fileCfg = {
           runMode: asRunMode(doc.runMode),
@@ -91,7 +114,14 @@ export function loadConfig(): AppConfig {
                 }
               }
             : undefined,
-          secrets: { backend: asSecretsBackend(secrets?.backend) }
+          secrets: { backend: asSecretsBackend(secrets?.backend) },
+          tooling: tooling
+            ? {
+                agentEndpoint: typeof tooling.agentEndpoint === "string" ? tooling.agentEndpoint : undefined,
+                retryAttempts: asNumber(tooling.retryAttempts),
+                defaultTimeoutMs: asNumber(tooling.defaultTimeoutMs)
+              }
+            : undefined
         };
       }
     }
@@ -102,6 +132,9 @@ export function loadConfig(): AppConfig {
   const envProviders = process.env.PROVIDERS;
   const envRedirectBaseUrl = process.env.OAUTH_REDIRECT_BASE;
   const envSecretsBackend = asSecretsBackend(process.env.SECRETS_BACKEND);
+  const envAgentEndpoint = process.env.TOOL_AGENT_ENDPOINT;
+  const envAgentRetries = asNumber(process.env.TOOL_AGENT_RETRIES);
+  const envAgentTimeout = asNumber(process.env.TOOL_AGENT_TIMEOUT_MS);
 
   const providersEnabledFromEnv = envProviders
     ? envProviders
@@ -131,6 +164,11 @@ export function loadConfig(): AppConfig {
     },
     secrets: {
       backend: envSecretsBackend ?? fileCfg.secrets?.backend ?? DEFAULT_CONFIG.secrets.backend
+    },
+    tooling: {
+      agentEndpoint: envAgentEndpoint ?? fileCfg.tooling?.agentEndpoint ?? DEFAULT_CONFIG.tooling.agentEndpoint,
+      retryAttempts: envAgentRetries ?? fileCfg.tooling?.retryAttempts ?? DEFAULT_CONFIG.tooling.retryAttempts,
+      defaultTimeoutMs: envAgentTimeout ?? fileCfg.tooling?.defaultTimeoutMs ?? DEFAULT_CONFIG.tooling.defaultTimeoutMs
     }
   };
 }

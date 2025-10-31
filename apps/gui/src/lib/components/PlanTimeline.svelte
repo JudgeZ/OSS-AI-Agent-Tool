@@ -44,11 +44,26 @@
     {#each $timelineState.steps as step (step.id)}
       <li class={`timeline__item timeline__item--${step.state}`} data-testid={`step-${step.id}`}>
         <header class="timeline__header">
-          <div>
+          <div class="timeline__meta">
             <h2>{step.action}</h2>
-            <span class={`capability capability--${step.capability.replace(/\./g, '-')}`}>
-              {step.capability}
-            </span>
+            <div class="timeline__details">
+              <span class="capability-label">{step.capabilityLabel}</span>
+              <span class={`capability capability--${step.capability.replace(/\./g, '-')}`}>
+                {step.capability}
+              </span>
+              <span class="detail">tool: {step.tool}</span>
+              <span class="detail">timeout: {step.timeoutSeconds}s</span>
+              {#if step.approvalRequired}
+                <span class="detail approval">approval required</span>
+              {/if}
+            </div>
+            {#if step.labels.length > 0}
+              <div class="labels">
+                {#each step.labels as label}
+                  <span class="label">{label}</span>
+                {/each}
+              </div>
+            {/if}
           </div>
           <span class="step-state">{step.state.replace(/_/g, ' ')}</span>
         </header>
@@ -154,6 +169,21 @@
     font-size: 1.15rem;
   }
 
+  .timeline__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .timeline__details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #cbd5f5;
+  }
+
   .capability {
     display: inline-block;
     padding: 0.25rem 0.5rem;
@@ -164,6 +194,10 @@
     letter-spacing: 0.08em;
   }
 
+  .capability-label {
+    font-weight: 600;
+  }
+
   .capability--repo-write {
     background: rgba(244, 114, 182, 0.2);
     color: #f472b6;
@@ -172,6 +206,34 @@
   .capability--network-egress {
     background: rgba(248, 113, 113, 0.18);
     color: #f87171;
+  }
+
+  .detail {
+    background: rgba(148, 163, 184, 0.12);
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.4rem;
+    text-transform: lowercase;
+  }
+
+  .detail.approval {
+    background: rgba(250, 204, 21, 0.2);
+    color: #facc15;
+  }
+
+  .labels {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .label {
+    font-size: 0.7rem;
+    background: rgba(94, 234, 212, 0.15);
+    color: #5eead4;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
 
   .step-state {

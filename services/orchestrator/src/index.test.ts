@@ -62,7 +62,7 @@ describe("orchestrator http api", () => {
 
       const planResponse = await request(app).post("/plan").send({ goal: "Request approval" }).expect(201);
       const planId: string = planResponse.body.plan.id;
-      const approvalStep = planResponse.body.plan.steps.find((step: { approval: boolean }) => step.approval);
+      const approvalStep = planResponse.body.plan.steps.find((step: { approvalRequired: boolean }) => step.approvalRequired);
       if (!approvalStep) {
         throw new Error("expected an approval-requiring step");
       }
@@ -73,10 +73,14 @@ describe("orchestrator http api", () => {
         planId,
         step: {
           id: approvalStep.id,
+          action: approvalStep.action,
+          tool: approvalStep.tool,
           state: "waiting_approval",
           capability: approvalStep.capability,
-          timeout_s: approvalStep.timeout_s,
-          approval: true,
+          capabilityLabel: approvalStep.capabilityLabel,
+          labels: approvalStep.labels,
+          timeoutSeconds: approvalStep.timeoutSeconds,
+          approvalRequired: true,
           summary: "Awaiting confirmation"
         }
       });
@@ -97,7 +101,7 @@ describe("orchestrator http api", () => {
 
       const planResponse = await request(app).post("/plan").send({ goal: "Reject approval" }).expect(201);
       const planId: string = planResponse.body.plan.id;
-      const approvalStep = planResponse.body.plan.steps.find((step: { approval: boolean }) => step.approval);
+      const approvalStep = planResponse.body.plan.steps.find((step: { approvalRequired: boolean }) => step.approvalRequired);
       if (!approvalStep) {
         throw new Error("expected an approval-requiring step");
       }
@@ -108,11 +112,15 @@ describe("orchestrator http api", () => {
         planId,
         step: {
           id: approvalStep.id,
+          action: approvalStep.action,
+          tool: approvalStep.tool,
           state: "waiting_approval",
           capability: approvalStep.capability,
-          timeout_s: approvalStep.timeout_s,
-          approval: true,
-          summary: "Pending" 
+          capabilityLabel: approvalStep.capabilityLabel,
+          labels: approvalStep.labels,
+          timeoutSeconds: approvalStep.timeoutSeconds,
+          approvalRequired: true,
+          summary: "Pending"
         }
       });
 
@@ -132,7 +140,7 @@ describe("orchestrator http api", () => {
 
       const planResponse = await request(app).post("/plan").send({ goal: "Invalid state" }).expect(201);
       const planId: string = planResponse.body.plan.id;
-      const approvalStep = planResponse.body.plan.steps.find((step: { approval: boolean }) => step.approval);
+      const approvalStep = planResponse.body.plan.steps.find((step: { approvalRequired: boolean }) => step.approvalRequired);
       if (!approvalStep) {
         throw new Error("expected an approval-requiring step");
       }

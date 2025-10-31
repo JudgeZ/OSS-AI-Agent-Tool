@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package agent.v1;
+
+option go_package = "oss-ai-agent-tool/apps/gateway-api/internal/agentpb";
+
+message ToolInvocation {
+  string invocation_id = 1;
+  string plan_id = 2;
+  string step_id = 3;
+  string tool = 4;
+  string capability = 5;
+  string capability_label = 6;
+  repeated string labels = 7;
+  string input_json = 8;
+  map<string, string> metadata = 9;
+  int32 timeout_seconds = 10;
+  bool approval_required = 11;
+}
+
+message ToolEvent {
+  string invocation_id = 1;
+  string plan_id = 2;
+  string step_id = 3;
+  string state = 4;
+  string summary = 5;
+  string output_json = 6;
+  string occurred_at = 7;
+}
+
+message ExecuteToolRequest {
+  ToolInvocation invocation = 1;
+}
+
+message ExecuteToolResponse {
+  repeated ToolEvent events = 1;
+}
+
+service AgentService {
+  rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
+}
