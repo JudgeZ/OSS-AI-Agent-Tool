@@ -31,6 +31,8 @@ services:
       LANGFUSE_PUBLIC_KEY: dev-public
       LANGFUSE_SECRET_KEY: dev-secret
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      LOCAL_SECRETS_PASSPHRASE: ${LOCAL_SECRETS_PASSPHRASE:?LOCAL_SECRETS_PASSPHRASE must be set}
+      LOCAL_SECRETS_PATH: ${LOCAL_SECRETS_PATH:-/home/node/.oss-orchestrator/secrets.json}
     ports:
       - "4000:4000"
     depends_on:

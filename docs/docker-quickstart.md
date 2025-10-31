@@ -28,7 +28,7 @@ EOF
 
 Edit `config/app.yaml` (or set environment variables) to match your provider credentials and messaging preferences. See [Configuration](./configuration.md) for the full schema.
 
-Set a passphrase for the local secrets keystore before you start the stack. The orchestrator stores encrypted provider tokens at `~/.oss-orchestrator/secrets.json` by default, so export the passphrase (or place it in a `.env` file consumed by Compose):
+Set a passphrase for the local secrets keystore before you start the stack. The orchestrator stores encrypted provider tokens at `~/.oss-orchestrator/secrets.json` by default, so export the passphrase (or place it in a `.env` file consumed by Compose). The Compose file forwards these values into the orchestrator container:
 
 ```bash
 export LOCAL_SECRETS_PASSPHRASE="choose-a-strong-passphrase"
