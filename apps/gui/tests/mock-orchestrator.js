@@ -6,6 +6,12 @@ const port = Number(process.env.MOCK_PORT || 4010);
 const plans = new Map();
 const clients = new Map();
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+};
+
 function ensurePlan(planId) {
   if (!plans.has(planId)) {
     plans.set(planId, {
@@ -133,7 +139,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      Connection: 'keep-alive'
+      Connection: 'keep-alive',
+      ...corsHeaders
     });
     res.write('\n');
     clients.set(planId, { res });
@@ -142,6 +149,12 @@ const server = http.createServer((req, res) => {
       clearPlanTimers(planId);
       clients.delete(planId);
     });
+    return;
+  }
+
+  if (req.method === 'OPTIONS' && approveMatch) {
+    res.writeHead(204, corsHeaders);
+    res.end();
     return;
   }
 
@@ -164,13 +177,13 @@ const server = http.createServer((req, res) => {
       }
 
       if (!plan.steps[stepId]) {
-        res.writeHead(404);
+        res.writeHead(404, corsHeaders);
         res.end('Step not found');
         return;
       }
 
       if (plan.awaiting !== stepId) {
-        res.writeHead(409);
+        res.writeHead(409, corsHeaders);
         res.end('No pending approval for this step');
         return;
       }
@@ -181,7 +194,7 @@ const server = http.createServer((req, res) => {
           step: { ...plan.steps[stepId], state: 'rejected', transitioned_at: new Date().toISOString() }
         });
         plan.awaiting = null;
-        res.writeHead(204);
+        res.writeHead(204, corsHeaders);
         res.end();
         return;
       }
@@ -215,13 +228,13 @@ const server = http.createServer((req, res) => {
           step: { ...s3, state: 'completed', transitioned_at: new Date().toISOString() }
         }),
       650);
-      res.writeHead(204);
+      res.writeHead(204, corsHeaders);
       res.end();
     });
     return;
   }
 
-  res.writeHead(404);
+  res.writeHead(404, corsHeaders);
   res.end();
 });
 

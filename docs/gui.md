@@ -16,7 +16,7 @@ npm install
 npm run dev
 ```
 
-By default the UI connects to `http://127.0.0.1:3001`. Override the orchestrator base URL when launching the dev server:
+By default the UI connects to `http://127.0.0.1:4000`. Override the orchestrator base URL when launching the dev server:
 
 ```bash
 VITE_ORCHESTRATOR_URL=http://localhost:4010 npm run dev
