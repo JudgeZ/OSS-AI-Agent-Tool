@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -138,9 +139,12 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type flushingWriter struct {
 	w       http.ResponseWriter
 	flusher http.Flusher
+	mu      sync.Mutex
 }
 
 func (fw *flushingWriter) Write(p []byte) (int, error) {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
 	n, err := fw.w.Write(p)
 	if n > 0 {
 		fw.flusher.Flush()
