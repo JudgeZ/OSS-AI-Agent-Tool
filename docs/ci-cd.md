@@ -56,10 +56,19 @@ helm pull oci://ghcr.io/<owner>/oss-ai-agent-tool/charts/oss-ai-agent-tool --ver
 - **What runs:**
   - Trivy filesystem scan (CRITICAL/HIGH severities fail the job).
   - Trivy container image scans for each Dockerfile (skips automatically when a Dockerfile is absent).
+  - Trivy configuration scan against `charts/oss-ai-agent-tool` to surface Helm/Kubernetes misconfigurations.
   - Semgrep SAST using the `auto` ruleset.
   - CodeQL analysis for Go and TypeScript/JavaScript.
   - Gitleaks secret detection (`detect --redact`).
 - **Why it matters:** all jobs must pass; any vulnerability or secret finding blocks merges until addressed.
+
+### Running security checks locally
+- **Gitleaks:** `docker run --rm -v $(pwd):/repo zricethezav/gitleaks:latest detect --source=/repo --redact`
+- **Trivy filesystem scan:** `trivy fs --exit-code 1 --severity CRITICAL,HIGH .`
+- **Trivy image scan:** `trivy image --exit-code 1 --severity CRITICAL,HIGH <local-image-tag>`
+- **Trivy config scan (Helm chart):** `trivy config charts/oss-ai-agent-tool`
+- **Semgrep:** `semgrep scan --config auto`
+- **CodeQL:** follow [GitHub's CodeQL CLI docs](https://codeql.github.com/docs/codeql-cli/using-the-codeql-cli/) to initialize and analyze the database (`codeql database create` + `codeql database analyze`).
 
 ## Release notes automation (`release-drafter.yml`)
 `Release Drafter` groups merged pull requests by category and prepares draft notes tagged as `v<next patch>`. It runs automatically via the GitHub App once enabled in repository settings.
