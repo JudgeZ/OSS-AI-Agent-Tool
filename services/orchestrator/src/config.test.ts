@@ -5,7 +5,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "./config.js";
 
-const ENV_KEYS = ["RUN_MODE", "MESSAGE_BUS", "PROVIDERS", "OAUTH_REDIRECT_BASE", "SECRETS_BACKEND", "APP_CONFIG"] as const;
+const ENV_KEYS = [
+  "RUN_MODE",
+  "MESSAGE_BUS",
+  "MESSAGING_TYPE",
+  "PROVIDERS",
+  "OAUTH_REDIRECT_BASE",
+  "SECRETS_BACKEND",
+  "APP_CONFIG"
+] as const;
 
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string>> = {};
 ENV_KEYS.forEach(key => {
@@ -91,6 +99,26 @@ secrets:
     expect(config.providers.enabled).toEqual(["anthropic", "openai"]);
     expect(config.auth.oauth.redirectBaseUrl).toBe("https://env.example.com/callback");
     expect(config.secrets.backend).toBe("vault");
+  });
+
+  it("prefers MESSAGING_TYPE over MESSAGE_BUS when both are provided", () => {
+    delete process.env.APP_CONFIG;
+    process.env.MESSAGE_BUS = "rabbitmq";
+    process.env.MESSAGING_TYPE = "kafka";
+
+    const config = loadConfig();
+
+    expect(config.messaging.type).toBe("kafka");
+  });
+
+  it("falls back to MESSAGE_BUS when MESSAGING_TYPE is unset", () => {
+    delete process.env.APP_CONFIG;
+    delete process.env.MESSAGING_TYPE;
+    process.env.MESSAGE_BUS = "kafka";
+
+    const config = loadConfig();
+
+    expect(config.messaging.type).toBe("kafka");
   });
 
   it("merges file configuration with environment overrides using existing precedence", () => {
