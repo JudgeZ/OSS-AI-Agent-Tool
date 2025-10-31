@@ -14,15 +14,17 @@ function ensurePlan(planId) {
           id: 's1',
           action: 'Index repository',
           capability: 'repo.read',
+          capabilityLabel: 'Read repository',
           summary: 'Scanning files',
-          approval: false
+          approvalRequired: false
         },
         s2: {
           id: 's2',
           action: 'Apply workspace edits',
           capability: 'repo.write',
+          capabilityLabel: 'Apply repository changes',
           summary: 'Proposed changes ready',
-          approval: true,
+          approvalRequired: true,
           output: {
             diff: [
               {
@@ -36,8 +38,9 @@ function ensurePlan(planId) {
           id: 's3',
           action: 'Run smoke tests',
           capability: 'test.run',
+          capabilityLabel: 'Execute tests',
           summary: 'Smoke suite execution',
-          approval: false
+          approvalRequired: false
         }
       },
       awaiting: null,
@@ -60,6 +63,43 @@ function schedule(planId, fn, delay) {
   plan.timers.push(timer);
 }
 
+function buildStepEventPayload(step, options) {
+  const {
+    state,
+    output,
+    includeTransitionTimestamp = true,
+    occurredAt = new Date().toISOString(),
+    transitionedAt
+  } = options;
+  const transitionTime = includeTransitionTimestamp ? transitionedAt ?? occurredAt : undefined;
+
+  const stepPayload = {
+    ...step,
+    state
+  };
+
+  if (output !== undefined) {
+    stepPayload.output = output;
+  }
+
+  if (transitionTime) {
+    stepPayload.transitionedAt = transitionTime;
+  }
+
+  return {
+    occurredAt,
+    detail: {
+      occurredAt,
+      step: {
+        capabilityLabel: step.capabilityLabel,
+        approvalRequired: step.approvalRequired,
+        ...(transitionTime ? { transitionedAt: transitionTime } : {})
+      }
+    },
+    step: stepPayload
+  };
+}
+
 function startPlan(planId) {
   const plan = ensurePlan(planId);
   const baseDelay = 250;
@@ -68,19 +108,19 @@ function startPlan(planId) {
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s1, state: 'queued', transitioned_at: new Date().toISOString() }
+      ...buildStepEventPayload(s1, { state: 'queued' })
     }),
   baseDelay);
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s1, state: 'running', transitioned_at: new Date().toISOString() }
+      ...buildStepEventPayload(s1, { state: 'running' })
     }),
   baseDelay * 2);
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s1, state: 'completed', transitioned_at: new Date().toISOString() }
+      ...buildStepEventPayload(s1, { state: 'completed' })
     }),
   baseDelay * 3);
 
@@ -88,20 +128,20 @@ function startPlan(planId) {
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s2, state: 'queued', transitioned_at: new Date().toISOString(), output: s2.output }
+      ...buildStepEventPayload(s2, { state: 'queued', output: s2.output })
     }),
   baseDelay * 4);
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s2, state: 'running', transitioned_at: new Date().toISOString(), output: s2.output }
+      ...buildStepEventPayload(s2, { state: 'running', output: s2.output })
     }),
   baseDelay * 5);
   schedule(planId, () => {
     plan.awaiting = s2.id;
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s2, state: 'waiting_approval', transitioned_at: new Date().toISOString(), output: s2.output }
+      ...buildStepEventPayload(s2, { state: 'waiting_approval', output: s2.output })
     });
   }, baseDelay * 6);
 
@@ -109,7 +149,7 @@ function startPlan(planId) {
   schedule(planId, () =>
     writeEvent(planId, 'plan.step', {
       plan_id: planId,
-      step: { ...s3, state: 'queued', transitioned_at: new Date().toISOString() }
+      ...buildStepEventPayload(s3, { state: 'queued' })
     }),
   baseDelay * 6);
 }
@@ -126,6 +166,16 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const sseMatch = url.pathname.match(/^\/plan\/([^/]+)\/events$/);
   const approveMatch = url.pathname.match(/^\/plan\/([^/]+)\/steps\/([^/]+)\/approve$/);
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
 
   if (req.method === 'GET' && sseMatch) {
     const planId = decodeURIComponent(sseMatch[1]);
@@ -178,7 +228,7 @@ const server = http.createServer((req, res) => {
       if (decision === 'reject') {
         writeEvent(planId, 'plan.step', {
           plan_id: planId,
-          step: { ...plan.steps[stepId], state: 'rejected', transitioned_at: new Date().toISOString() }
+          ...buildStepEventPayload(plan.steps[stepId], { state: 'rejected' })
         });
         plan.awaiting = null;
         res.writeHead(204);
@@ -186,33 +236,34 @@ const server = http.createServer((req, res) => {
         return;
       }
 
+      const approvalOccurredAt = new Date('2024-01-01T00:00:00.000Z').toISOString();
       writeEvent(planId, 'plan.step', {
         plan_id: planId,
-        step: { ...plan.steps[stepId], state: 'approved', transitioned_at: new Date().toISOString(), output: plan.steps[stepId].output }
+        ...buildStepEventPayload(plan.steps[stepId], {
+          state: 'approved',
+          output: plan.steps[stepId].output,
+          includeTransitionTimestamp: false,
+          occurredAt: approvalOccurredAt
+        })
       });
       plan.awaiting = null;
       schedule(planId, () =>
         writeEvent(planId, 'plan.step', {
           plan_id: planId,
-          step: {
-            ...plan.steps[stepId],
-            state: 'completed',
-            transitioned_at: new Date().toISOString(),
-            output: plan.steps[stepId].output
-          }
+          ...buildStepEventPayload(plan.steps[stepId], { state: 'completed', output: plan.steps[stepId].output })
         }),
       250);
       const s3 = plan.steps.s3;
       schedule(planId, () =>
         writeEvent(planId, 'plan.step', {
           plan_id: planId,
-          step: { ...s3, state: 'running', transitioned_at: new Date().toISOString() }
+          ...buildStepEventPayload(s3, { state: 'running' })
         }),
       300);
       schedule(planId, () =>
         writeEvent(planId, 'plan.step', {
           plan_id: planId,
-          step: { ...s3, state: 'completed', transitioned_at: new Date().toISOString() }
+          ...buildStepEventPayload(s3, { state: 'completed' })
         }),
       650);
       res.writeHead(204);
