@@ -37,3 +37,21 @@ Some desktop clients (CLI / GUI) use a loopback redirect during OAuth consent. W
 - `OAUTH_REDIRECT_BASE`: Public base URL for the gateway callback (defaults to `http://127.0.0.1:8080`).
 - `LOCAL_SECRETS_PASSPHRASE`: Required passphrase for encrypting the local keystore (`~/.oss-orchestrator/secrets.json`).
 - Optional: `LOCAL_SECRETS_PATH` to override the keystore location.
+
+### Vault-backed secrets (enterprise)
+
+Set `SECRETS_BACKEND=vault` to switch the orchestrator to the Vault-backed store. The service reads the
+following environment variables to reach your Vault cluster:
+
+- `VAULT_ADDR`: HTTPS endpoint for the Vault API (required).
+- `VAULT_TOKEN`: Token with read/write access to the KV secrets engine (required).
+- `VAULT_KV_MOUNT`: Mount name for the KV v2 engine (defaults to `kv`).
+- `VAULT_SECRET_PREFIX`: Path prefix under the mount where orchestrator secrets are stored
+  (defaults to `oss/orchestrator`).
+- `VAULT_NAMESPACE`: Optional Vault namespace for multi-tenant clusters.
+- `VAULT_CA_CERT`: Optional CA certificate path for self-signed Vault deployments.
+- `VAULT_TLS_REJECT_UNAUTHORIZED`: Set to `false`/`0` to allow self-signed TLS when you cannot
+  supply a CA certificate (defaults to strict verification).
+
+Secrets are written to `${VAULT_KV_MOUNT}/data/${VAULT_SECRET_PREFIX}/…` and deleted via the corresponding
+`metadata` endpoint so that previous versions are also removed.

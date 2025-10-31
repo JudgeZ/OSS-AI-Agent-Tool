@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import https from "node:https";
 import sodium from "libsodium-wrappers-sumo";
 
 export interface SecretsStore {
@@ -131,8 +133,165 @@ export class LocalFileStore implements SecretsStore {
 
 // Placeholder for enterprise secret store (Vault / cloud)
 // In production, replace with a proper backend.
+export type VaultStoreOptions = {
+  address?: string;
+  token?: string;
+  namespace?: string;
+  mount?: string;
+  prefix?: string;
+  caCertPath?: string;
+  tlsRejectUnauthorized?: boolean;
+  fetchImpl?: typeof fetch;
+};
+
+export class VaultStoreError extends Error {
+  constructor(message: string, readonly status?: number, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "VaultStoreError";
+  }
+}
+
 export class VaultStore implements SecretsStore {
-  async get(k: string) { return undefined; }
-  async set(k: string, v: string) { /* no-op */ }
-  async delete(k: string) { /* no-op */ }
+  private readonly address: string;
+  private readonly token: string;
+  private readonly namespace?: string;
+  private readonly mount: string;
+  private readonly prefix: string;
+  private readonly fetchImpl: typeof fetch;
+  private readonly tlsAgent?: https.Agent;
+
+  constructor(options: VaultStoreOptions = {}) {
+    this.address = (options.address ?? process.env.VAULT_ADDR)?.replace(/\/$/, "") ?? "";
+    this.token = options.token ?? process.env.VAULT_TOKEN ?? "";
+    this.namespace = options.namespace ?? process.env.VAULT_NAMESPACE;
+    const mount = options.mount ?? process.env.VAULT_KV_MOUNT ?? "kv";
+    this.mount = mount.replace(/^\/+|\/+$/g, "");
+    const prefix = options.prefix ?? process.env.VAULT_SECRET_PREFIX ?? "oss/orchestrator";
+    this.prefix = prefix.replace(/^\/+|\/+$/g, "");
+    const tlsRejectEnv = process.env.VAULT_TLS_REJECT_UNAUTHORIZED;
+    const normalizedReject = tlsRejectEnv?.toLowerCase();
+    const tlsReject =
+      options.tlsRejectUnauthorized ??
+      (normalizedReject != null ? normalizedReject !== "false" && normalizedReject !== "0" : true);
+    this.fetchImpl = options.fetchImpl ?? fetch;
+
+    if (!this.address) {
+      throw new VaultStoreError("VaultStore requires VAULT_ADDR (or address option) to be set");
+    }
+    if (!this.token) {
+      throw new VaultStoreError("VaultStore requires VAULT_TOKEN (or token option) to be set");
+    }
+
+    const caCertPath = options.caCertPath ?? process.env.VAULT_CA_CERT;
+    if (caCertPath || tlsReject === false) {
+      let ca: string | undefined;
+      if (caCertPath) {
+        try {
+          ca = readFileSync(caCertPath, "utf-8");
+        } catch (error) {
+          throw new VaultStoreError(`Failed to read Vault CA certificate at ${caCertPath}`, undefined, {
+            cause: error
+          });
+        }
+      }
+      this.tlsAgent = new https.Agent({
+        ca,
+        rejectUnauthorized: tlsReject
+      });
+    }
+  }
+
+  async get(key: string): Promise<string | undefined> {
+    const url = this.buildUrl("data", key);
+    const response = await this.request(url, { method: "GET" }, [200, 404]);
+    if (response.status === 404) {
+      return undefined;
+    }
+    const payload = (await response.json()) as {
+      data?: { data?: Record<string, unknown> };
+    };
+    const value = payload?.data?.data?.value;
+    return typeof value === "string" ? value : undefined;
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    const url = this.buildUrl("data", key);
+    await this.request(
+      url,
+      {
+        method: "POST",
+        body: JSON.stringify({ data: { value } })
+      },
+      [200, 204]
+    );
+  }
+
+  async delete(key: string): Promise<void> {
+    const url = this.buildUrl("metadata", key);
+    await this.request(url, { method: "DELETE" }, [200, 204]);
+  }
+
+  private buildUrl(type: "data" | "metadata", key: string): URL {
+    const pathFragment = this.buildPath(key);
+    return new URL(`/v1/${this.mount}/${type}/${pathFragment}`, this.address);
+  }
+
+  private buildPath(key: string): string {
+    const normalizedKey = key
+      .split(":")
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(segment => encodeURIComponent(segment))
+      .join("/");
+    const prefix = this.prefix ? `${this.prefix}/` : "";
+    return `${prefix}${normalizedKey}`.replace(/\/+$/, "");
+  }
+
+  private async request(url: URL, init: RequestInit, okStatuses: number[]): Promise<Response> {
+    const headers = new Headers(init.headers ?? {});
+    headers.set("X-Vault-Token", this.token);
+    if (this.namespace) {
+      headers.set("X-Vault-Namespace", this.namespace);
+    }
+    headers.set("Accept", "application/json");
+    if (init.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const requestInit: RequestInit & { agent?: https.Agent } = {
+      ...init,
+      headers,
+      agent: this.tlsAgent
+    };
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, requestInit);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new VaultStoreError(`Failed to reach Vault at ${this.address}: ${reason}`, undefined, {
+        cause: error
+      });
+    }
+
+    if (!okStatuses.includes(response.status)) {
+      let detail: string | undefined;
+      try {
+        const body = (await response.clone().json()) as any;
+        if (Array.isArray(body?.errors)) {
+          detail = body.errors.join("; ");
+        } else if (body?.error) {
+          detail = String(body.error);
+        } else if (typeof body === "string") {
+          detail = body;
+        }
+      } catch {}
+      const statusMessage = detail
+        ? `${response.status} ${response.statusText} - ${detail}`
+        : `${response.status} ${response.statusText}`;
+      throw new VaultStoreError(`Vault request to ${url.pathname} failed: ${statusMessage}`, response.status);
+    }
+
+    return response;
+  }
 }

@@ -18,7 +18,18 @@ const overrides = new Map<string, ModelProvider>();
 export function getSecretsStore(): SecretsStore {
   if (!secretsStore) {
     const cfg = loadConfig();
-    secretsStore = cfg.secrets.backend === "vault" ? new VaultStore() : new LocalFileStore();
+    secretsStore =
+      cfg.secrets.backend === "vault"
+        ? new VaultStore({
+            address: cfg.secrets.vault?.address,
+            token: cfg.secrets.vault?.token,
+            namespace: cfg.secrets.vault?.namespace,
+            mount: cfg.secrets.vault?.mount,
+            prefix: cfg.secrets.vault?.prefix,
+            caCertPath: cfg.secrets.vault?.caCertPath,
+            tlsRejectUnauthorized: cfg.secrets.vault?.tlsRejectUnauthorized
+          })
+        : new LocalFileStore();
   }
   return secretsStore;
 }
