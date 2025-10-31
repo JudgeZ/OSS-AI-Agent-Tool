@@ -35,7 +35,22 @@ async function main() {
     const goal = rest.join(" ").trim() || "General improvement";
     const { createPlan } = await import("../../services/orchestrator/src/plan/planner.js");
     const plan = createPlan(goal);
-    console.log("Plan created:", plan.id);
+    console.log(`Plan created: ${plan.id}`);
+    console.log("Goal:", plan.goal);
+    console.log("Steps:");
+    for (const step of plan.steps) {
+      const approvalText = step.approvalRequired ? "requires approval" : "auto";
+      console.log(
+        `  • ${step.action} (${step.capabilityLabel}) [tool=${step.tool}, timeout=${step.timeoutSeconds}s, ${approvalText}]`
+      );
+    }
+    if (plan.successCriteria?.length) {
+      console.log("Success criteria:");
+      for (const criteria of plan.successCriteria) {
+        console.log(`  - ${criteria}`);
+      }
+    }
+    console.log(`SSE stream: /plan/${plan.id}/events`);
     return;
   }
   usage();

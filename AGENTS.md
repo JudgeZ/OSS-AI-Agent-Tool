@@ -81,12 +81,48 @@ Plan JSON (canonical excerpt)
   "id": "plan-<uuid>",
   "goal": "Upgrade framework and fix failing tests",
   "steps": [
-    {"id":"s1","action":"index_repo","capability":"repo.read","timeout_s":300},
-    {"id":"s2","action":"apply_changes","capability":"repo.write","approval":true,"timeout_s":900},
-    {"id":"s3","action":"run_tests","capability":"test.run","timeout_s":900},
-    {"id":"s4","action":"open_pr","capability":"github.write","approval":true,"timeout_s":300}
+    {
+      "id": "s1",
+      "action": "index_repo",
+      "tool": "repo_indexer",
+      "capability": "repo.read",
+      "capabilityLabel": "Read repository",
+      "timeoutSeconds": 300,
+      "approvalRequired": false,
+      "labels": ["repo", "automation"]
+    },
+    {
+      "id": "s2",
+      "action": "apply_changes",
+      "tool": "code_writer",
+      "capability": "repo.write",
+      "capabilityLabel": "Apply repository changes",
+      "timeoutSeconds": 900,
+      "approvalRequired": true,
+      "labels": ["repo", "automation", "approval"]
+    },
+    {
+      "id": "s3",
+      "action": "run_tests",
+      "tool": "test_runner",
+      "capability": "test.run",
+      "capabilityLabel": "Execute tests",
+      "timeoutSeconds": 900,
+      "approvalRequired": false,
+      "labels": ["repo", "automation"]
+    },
+    {
+      "id": "s4",
+      "action": "open_pr",
+      "tool": "github_client",
+      "capability": "github.write",
+      "capabilityLabel": "Open pull request",
+      "timeoutSeconds": 300,
+      "approvalRequired": true,
+      "labels": ["automation", "approval"]
+    }
   ],
-  "success_criteria": ["All tests pass","CI green","Docs updated"]
+  "successCriteria": ["All tests pass","CI green","Docs updated"]
 }
 
 

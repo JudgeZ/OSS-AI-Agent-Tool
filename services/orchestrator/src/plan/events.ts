@@ -1,27 +1,6 @@
 import { EventEmitter } from "node:events";
 
-export type PlanStepState =
-  | "queued"
-  | "running"
-  | "waiting_approval"
-  | "approved"
-  | "rejected"
-  | "completed"
-  | "failed";
-
-export type PlanStepEvent = {
-  event: "plan.step";
-  traceId: string;
-  planId: string;
-  step: {
-    id: string;
-    state: PlanStepState;
-    capability: string;
-    timeout_s: number;
-    approval: boolean;
-    summary?: string;
-  };
-};
+import { parsePlanStepEvent, type PlanStepEvent, type PlanStepState } from "./validation.js";
 
 const TERMINAL_STATES = new Set<PlanStepState>(["completed", "failed"]);
 const MAX_EVENTS_PER_PLAN = 200;
@@ -46,7 +25,12 @@ function scheduleCleanup(planId: string, entry: PlanHistoryEntry): void {
 }
 
 export function publishPlanStepEvent(event: PlanStepEvent): void {
-  const planId = event.planId;
+  const enrichedEvent: PlanStepEvent = {
+    ...event,
+    occurredAt: event.occurredAt ?? new Date().toISOString()
+  };
+  const parsed = parsePlanStepEvent(enrichedEvent);
+  const planId = parsed.planId;
   const entry = history.get(planId) ?? { events: [] };
 
   if (entry.cleanupTimer) {
@@ -54,11 +38,11 @@ export function publishPlanStepEvent(event: PlanStepEvent): void {
     entry.cleanupTimer = undefined;
   }
 
-  entry.events = [...entry.events, event].slice(-MAX_EVENTS_PER_PLAN);
+  entry.events = [...entry.events, parsed].slice(-MAX_EVENTS_PER_PLAN);
   history.set(planId, entry);
-  emitter.emit(event.event, event);
+  emitter.emit(parsed.event, parsed);
 
-  if (TERMINAL_STATES.has(event.step.state)) {
+  if (TERMINAL_STATES.has(parsed.step.state)) {
     scheduleCleanup(planId, entry);
   }
 }

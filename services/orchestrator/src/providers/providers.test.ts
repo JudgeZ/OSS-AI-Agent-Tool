@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach, beforeAll, afterAll, vi } from "vitest
 import type { SecretsStore } from "../auth/SecretsStore.js";
 import type { ChatResponse, ModelProvider } from "./interfaces.js";
 import { OpenAIProvider } from "./openai.js";
+import { OllamaProvider } from "./ollama.js";
 import { clearProviderOverrides, routeChat, setProviderOverride } from "./ProviderRegistry.js";
 import { ProviderError } from "./utils.js";
 
@@ -126,5 +127,21 @@ describe("providers", () => {
       status: 401,
       provider: "router"
     });
+  });
+
+  it("surfaces Ollama HTTP errors with helpful messages", async () => {
+    const secrets = new MockSecretsStore();
+    const json = vi.fn();
+    const fetch = vi.fn().mockResolvedValue({ ok: false, status: 503, json });
+    const provider = new OllamaProvider(secrets, { fetch });
+
+    await expect(
+      provider.chat({
+        messages: [
+          { role: "system", content: "respond" },
+          { role: "user", content: "ping" }
+        ]
+      })
+    ).rejects.toMatchObject({ message: expect.stringContaining("503"), provider: "local_ollama" });
   });
 });

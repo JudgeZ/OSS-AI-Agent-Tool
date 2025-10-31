@@ -14,10 +14,14 @@ const baseEvent: PlanStepEvent = {
   planId: "plan-123",
   step: {
     id: "step-1",
+    action: "index_repo",
+    tool: "repo_indexer",
     state: "queued",
     capability: "repo.read",
-    timeout_s: 60,
-    approval: false,
+    capabilityLabel: "Read repository",
+    labels: ["repo"],
+    timeoutSeconds: 60,
+    approvalRequired: false,
   },
 };
 
@@ -40,6 +44,7 @@ describe("plan events history", () => {
     });
 
     expect(getPlanHistory(baseEvent.planId)).toHaveLength(2);
+    expect(getPlanHistory(baseEvent.planId)[0]?.occurredAt).toBeTruthy();
 
     publishPlanStepEvent({
       ...baseEvent,
@@ -67,5 +72,17 @@ describe("plan events history", () => {
     expect(events).toHaveLength(200);
     expect(events[0]!.step.id).toBe("step-50");
     expect(events.at(-1)!.step.id).toBe("step-249");
+  });
+
+  it("preserves provided timestamps when replaying events", () => {
+    const occurredAt = "2024-04-15T12:00:00.000Z";
+    publishPlanStepEvent({
+      ...baseEvent,
+      occurredAt,
+      step: { ...baseEvent.step, state: "running" },
+    });
+
+    const [event] = getPlanHistory(baseEvent.planId);
+    expect(event?.occurredAt).toBe(occurredAt);
   });
 });

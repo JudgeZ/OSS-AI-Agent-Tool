@@ -11,6 +11,9 @@
 | OpenRouter     | Yes              | Yes        | API Key / OAuth            | Consumer-friendly multi-model router |
 | Local (Ollama) | Yes              | Yes        | None                       | Use for offline/local-first |
 
+All adapters resolve credentials through the shared `SecretsStore` abstraction and raise structured `ProviderError` instances
+with retry hints so the orchestrator can fail over gracefully.
+
 ## Secrets configuration
 
 | Provider | SecretsStore key(s) | Environment fallback | Notes |
