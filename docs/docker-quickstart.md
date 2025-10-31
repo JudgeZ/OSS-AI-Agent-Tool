@@ -58,22 +58,26 @@ docker compose -f compose.dev.yaml up --build
 
 Compose will build images for the in-repo services and then start the following containers (entrypoints reflect the effective command from `docker compose config`):
 
-| Service | Image / build context | Entrypoint or command | Exposed ports | Purpose |
-| --- | --- | --- | --- | --- |
-| `gateway` | `./apps/gateway-api` → distroless | `/gateway-api` | `8080` | Serves the Gateway HTTP API with SSE endpoints. |
-| `orchestrator` | `./services/orchestrator` | `node dist/index.js` | `4000` | Runs orchestration flows and provider integrations. |
-| `indexer` | `./services/indexer` → distroless | `/app/indexer` | `7070` | Provides AST/indexing APIs for repositories. |
-| `memory-svc` | `node:20-alpine` | `tail -f /dev/null` | _n/a_ | Development container for building the memory service. |
-| `redis` | `redis/redis-stack-server:7.2.0-v9` | default | `6379` | In-memory cache and vector store. |
-| `postgres` | `postgres:15-alpine` | default | `5432` | Application relational datastore. |
-| `rabbitmq` | `rabbitmq:3.13-management` | default | `5672`, `15672` | Message queue plus management UI. |
-| `kafka` | `bitnami/kafka:3.7.0` | default | `9092` | Event backbone (KRaft mode). |
-| `jaeger` | `jaegertracing/all-in-one:1.57` | default | `16686`, `4317`, `4318` | Observability UI and OTLP collectors. |
-| `langfuse` | `langfuse/langfuse:2.14.1` | default | `3000` | LLM tracing and analytics dashboard. |
+| Service | Image / build context | Entrypoint or command | Depends on | Exposed ports | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| `gateway` | `./apps/gateway-api` → distroless | `/gateway-api` | `orchestrator` | `8080` | Serves the Gateway HTTP API with SSE endpoints. |
+| `orchestrator` | `./services/orchestrator` | `node dist/index.js` | `redis`, `postgres`, `rabbitmq`, `kafka` | `4000` | Runs orchestration flows and provider integrations. |
+| `indexer` | `./services/indexer` → distroless | `/app/indexer` | _n/a_ | `7070` | Provides AST/indexing APIs for repositories. |
+| `memory-svc` | `node:20-alpine` | `tail -f /dev/null` | _n/a_ | _n/a_ | Development container for building the memory service. |
+| `redis` | `redis/redis-stack-server:7.2.0-v9` | Image default (`redis-stack-server`) | _n/a_ | `6379` | In-memory cache and vector store. |
+| `postgres` | `postgres:15-alpine` | Image default (`docker-entrypoint.sh postgres`) | _n/a_ | `5432` | Application relational datastore. |
+| `rabbitmq` | `rabbitmq:3.13-management` | Image default (`docker-entrypoint.sh rabbitmq-server`) | _n/a_ | `5672`, `15672` | Message queue plus management UI. |
+| `kafka` | `bitnami/kafka:3.7.0` | Image default (`/opt/bitnami/scripts/kafka/run.sh`) | _n/a_ | `9092` | Event backbone (KRaft mode). |
+| `jaeger` | `jaegertracing/all-in-one:1.57` | Image default (`/go/bin/all-in-one`) | _n/a_ | `16686`, `4317`, `4318` | Observability UI and OTLP collectors. |
+| `langfuse` | `langfuse/langfuse:2.14.1` | Image default (`docker-entrypoint.sh start`) | `postgres` | `3000` | LLM tracing and analytics dashboard. |
 
-Because `gateway`, `orchestrator`, and `indexer` start their servers automatically, you can interact with them immediately after the `up` command finishes.
+Because the application services expose health checks and `depends_on` wiring, `gateway` waits for `orchestrator`, and `orchestrator` waits for the data plane (Redis, Postgres, RabbitMQ, Kafka) before accepting work. Once `docker compose` reports the stack as running you can immediately interact with the HTTP endpoints.
 
 > **Need a slimmer stack?** Limit the services you bring up, for example `docker compose -f compose.dev.yaml up gateway orchestrator redis postgres rabbitmq`, or create a local override file with the dependencies you require. Comments in `compose.dev.yaml` note where future profiles (e.g., Kafka) will land.
+
+### Production Compose parity
+
+`docker-compose.prod.yaml` runs the same application containers (`gateway`, `orchestrator`, `indexer`) plus the operational dependencies (`redis`, `postgres`, `rabbitmq`, `kafka`, `jaeger`, `langfuse`). The image tags default to `ghcr.io/yourorg/oss-ai-agent-tool/<service>:latest` and assume you have already pushed builds via CI. Health checks gate startup: `orchestrator` blocks on healthy Redis/Postgres while `langfuse` blocks on Postgres being ready. Adjust the `RUN_MODE`, secrets, and password environment variables before promoting the stack.
 
 ### Common flags
 
