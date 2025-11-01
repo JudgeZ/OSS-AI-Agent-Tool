@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import YAML from "yaml";
 
+import { startSpan } from "./observability/tracing.js";
+
 export type AppConfig = {
   runMode: "consumer" | "enterprise";
   messaging: { type: "rabbitmq" | "kafka" };
@@ -42,6 +44,16 @@ const DEFAULT_CONFIG: AppConfig = {
     defaultTimeoutMs: 15000
   }
 };
+
+export class ConfigLoadError extends Error {
+  readonly cause: Error;
+
+  constructor(message: string, cause: Error) {
+    super(`${message}: ${cause.message}`);
+    this.name = "ConfigLoadError";
+    this.cause = cause;
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : undefined;
@@ -144,6 +156,8 @@ export function loadConfig(): AppConfig {
               }
             : undefined
         };
+      } else {
+        span.addEvent("config.file.invalid", { reason: "non_object_root" });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
