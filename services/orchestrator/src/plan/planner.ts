@@ -104,6 +104,8 @@ export function createPlan(goal: string): Plan {
     );
 
     for (const step of steps) {
+      const state = step.approvalRequired ? "waiting_approval" : "queued";
+      const summary = step.approvalRequired ? "Awaiting approval" : "Queued for execution";
       publishPlanStepEvent({
         event: "plan.step",
         traceId: span.context.traceId,
@@ -112,12 +114,13 @@ export function createPlan(goal: string): Plan {
           id: step.id,
           action: step.action,
           tool: step.tool,
-          state: "queued",
+          state,
           capability: step.capability,
           capabilityLabel: step.capabilityLabel,
           labels: step.labels,
           timeoutSeconds: step.timeoutSeconds,
-          approvalRequired: step.approvalRequired
+          approvalRequired: step.approvalRequired,
+          summary
         }
       });
     }

@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
-import { loadConfig } from "./config.js";
+import { __resetLegacyMessagingWarningForTests, loadConfig } from "./config.js";
 
 const ENV_KEYS = [
   "RUN_MODE",
@@ -44,8 +44,13 @@ function restoreEnv(): void {
 }
 
 describe("loadConfig", () => {
+  let warnSpy: MockInstance<typeof console.warn>;
+
   beforeEach(() => {
     restoreEnv();
+    __resetLegacyMessagingWarningForTests();
+    warnSpy = vi.spyOn(console, "warn");
+    warnSpy.mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -53,6 +58,7 @@ describe("loadConfig", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     });
     restoreEnv();
+    warnSpy.mockRestore();
   });
 
   it("loads configuration values from a YAML file", () => {
@@ -111,7 +117,7 @@ secrets:
     expect(config.messaging.type).toBe("kafka");
   });
 
-  it("falls back to MESSAGE_BUS when MESSAGING_TYPE is unset", () => {
+  it("falls back to MESSAGE_BUS when MESSAGING_TYPE is unset and warns", () => {
     delete process.env.APP_CONFIG;
     delete process.env.MESSAGING_TYPE;
     process.env.MESSAGE_BUS = "kafka";
@@ -119,6 +125,7 @@ secrets:
     const config = loadConfig();
 
     expect(config.messaging.type).toBe("kafka");
+    expect(warnSpy).toHaveBeenCalledWith("MESSAGE_BUS is deprecated; use MESSAGING_TYPE instead");
   });
 
   it("merges file configuration with environment overrides using existing precedence", () => {
@@ -152,5 +159,45 @@ secrets:
     expect(config.providers.enabled).toEqual(["openai", "mistral"]);
     expect(config.auth.oauth.redirectBaseUrl).toBe("https://env.example.com/callback");
     expect(config.secrets.backend).toBe("localfile");
+  });
+  it("throws when the configuration file cannot be parsed", () => {
+    const configPath = createTempConfigFile(`
+runMode: consumer
+providers:
+  enabled: [invalid
+`);
+    process.env.APP_CONFIG = configPath;
+
+    expect(() => loadConfig()).toThrow(/Failed to parse configuration file/);
+  });
+
+  it("honors empty providers arrays from file configuration", () => {
+    const configPath = createTempConfigFile(`
+providers:
+  enabled: []
+`);
+    process.env.APP_CONFIG = configPath;
+
+    const config = loadConfig();
+
+    expect(config.providers.enabled).toEqual([]);
+  });
+
+  it("allows disabling providers via PROVIDERS env var", () => {
+    delete process.env.APP_CONFIG;
+    process.env.PROVIDERS = "";
+
+    const config = loadConfig();
+
+    expect(config.providers.enabled).toEqual([]);
+  });
+
+  it("defaults to vault secrets in enterprise mode when unspecified", () => {
+    const configPath = createTempConfigFile("runMode: enterprise\n");
+    process.env.APP_CONFIG = configPath;
+
+    const config = loadConfig();
+
+    expect(config.secrets.backend).toBe("vault");
   });
 });

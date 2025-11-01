@@ -15,7 +15,7 @@ export type AgentProfile = {
 export function loadAgentProfile(name: string): AgentProfile {
   const p = path.join(process.cwd(), "agents", name, "agent.md");
   const raw = fs.readFileSync(p, "utf-8");
-  const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/m.exec(raw);
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/m.exec(raw);
   let meta: Record<string, unknown> = {};
   let body = raw;
   if (m) {

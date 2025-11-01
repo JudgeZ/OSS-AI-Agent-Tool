@@ -67,13 +67,15 @@ Compose will build images for the in-repo services and then start the following 
 | `redis` | `redis/redis-stack-server:7.2.0-v9` | Image default (`redis-stack-server`) | _n/a_ | `6379` | In-memory cache and vector store. |
 | `postgres` | `postgres:15-alpine` | Image default (`docker-entrypoint.sh postgres`) | _n/a_ | `5432` | Application relational datastore. |
 | `rabbitmq` | `rabbitmq:3.13-management` | Image default (`docker-entrypoint.sh rabbitmq-server`) | _n/a_ | `5672`, `15672` | Message queue plus management UI. |
-| `kafka` | `bitnami/kafka:3.7.0` | Image default (`/opt/bitnami/scripts/kafka/run.sh`) | _n/a_ | `9092` | Event backbone (KRaft mode). |
+| `kafka` | `bitnami/kafka:3.7.0` | Image default (`/opt/bitnami/scripts/kafka/run.sh`) | _n/a_ | `9092` | Event backbone (KRaft mode). *(Adapter arrives in Phase 3; the container runs today so tooling can evolve safely.)* |
 | `jaeger` | `jaegertracing/all-in-one:1.57` | Image default (`/go/bin/all-in-one`) | _n/a_ | `16686`, `4317`, `4318` | Observability UI and OTLP collectors. |
 | `langfuse` | `langfuse/langfuse:2.14.1` | Image default (`docker-entrypoint.sh start`) | `postgres` | `3000` | LLM tracing and analytics dashboard. |
 
 Because the application services expose health checks and `depends_on` wiring, `gateway` waits for `orchestrator`, and `orchestrator` waits for the data plane (Redis, Postgres, RabbitMQ, Kafka) before accepting work. Once `docker compose` reports the stack as running you can immediately interact with the HTTP endpoints.
 
 > **Need a slimmer stack?** Limit the services you bring up, for example `docker compose -f compose.dev.yaml up gateway orchestrator redis postgres rabbitmq`, or create a local override file with the dependencies you require. Comments in `compose.dev.yaml` note where future profiles (e.g., Kafka) will land.
+
+> **Environment tips:** Prefer `MESSAGING_TYPE` when overriding the message bus. The legacy `MESSAGE_BUS` variable still works but prints a deprecation warning. Setting `PROVIDERS=""` disables remote model routing so you can run with only local Ollama.
 
 ### Production Compose parity
 

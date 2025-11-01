@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { queueDepthGauge } from "../observability/metrics.js";
-import { publishPlanStepEvent } from "../plan/events.js";
+import { getLatestPlanStepEvent, publishPlanStepEvent } from "../plan/events.js";
 import type { Plan, PlanStep } from "../plan/planner.js";
 import { getToolAgentClient, resetToolAgentClient, ToolClientError } from "../grpc/AgentClient.js";
 import type { ToolEvent } from "../plan/validation.js";
@@ -55,6 +55,13 @@ async function emitPlanEvent(
   update: Partial<ToolEvent> & { state: ToolEvent["state"]; summary?: string; output?: Record<string, unknown> }
 ): Promise<void> {
   await planStateStore?.setState(planId, step.id, update.state, update.summary, update.output);
+  const latest = getLatestPlanStepEvent(planId, step.id);
+  if (latest && latest.step.state === update.state) {
+    const summariesMatch = update.summary === undefined ? latest.step.summary === undefined : latest.step.summary === update.summary;
+    if (summariesMatch) {
+      return;
+    }
+  }
   publishPlanStepEvent({
     event: "plan.step",
     traceId,
@@ -123,13 +130,22 @@ export async function submitPlanSteps(plan: Plan, traceId: string): Promise<void
     }
 
     await planStateStore?.rememberStep(plan.id, step, traceId, "queued");
+    try {
+      await adapter.enqueue<PlanStepTaskPayload>(PLAN_STEPS_QUEUE, { planId: plan.id, step, traceId }, {
+        idempotencyKey: key,
+        headers: { "trace-id": traceId }
+      });
+    } catch (error) {
+      const summary = error instanceof Error ? error.message : "Failed to enqueue plan step";
+      await emitPlanEvent(plan.id, step, traceId, {
+        state: "failed",
+        summary
+      });
+      throw error;
+    }
     await emitPlanEvent(plan.id, step, traceId, {
       state: "queued",
       summary: "Queued for execution"
-    });
-    await adapter.enqueue<PlanStepTaskPayload>(PLAN_STEPS_QUEUE, { planId: plan.id, step, traceId }, {
-      idempotencyKey: key,
-      headers: { "trace-id": traceId }
     });
   });
 

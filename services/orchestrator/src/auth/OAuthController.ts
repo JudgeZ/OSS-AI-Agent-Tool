@@ -103,7 +103,8 @@ export async function callback(req: Request, res: Response) {
     res.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "failed to exchange code";
-    res.status(502).json({ error: message });
+    const status = typeof (error as any)?.status === "number" ? (error as any).status : 502;
+    res.status(status).json({ error: message });
   }
 }
 
@@ -124,17 +125,35 @@ async function exchangeCodeForTokens(cfg: ProviderConfig, code: string, codeVeri
     }
   }
 
-  const response = await fetch(cfg.tokenUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `token endpoint returned ${response.status}`);
+  const timeoutMs = loadConfig().tooling.defaultTimeoutMs;
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  let fetchResponse: globalThis.Response;
+  try {
+    fetchResponse = await fetch(cfg.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      const timeoutError = new Error(`token endpoint timed out after ${timeoutMs}ms`);
+      (timeoutError as any).status = 504;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
   }
-  const payload = (await response.json()) as TokenResponse;
+
+  if (!fetchResponse.ok) {
+    const text = await fetchResponse.text();
+    const err = new Error(text || `token endpoint returned ${fetchResponse.status}`);
+    (err as any).status = fetchResponse.status;
+    throw err;
+  }
+  const payload = (await fetchResponse.json()) as TokenResponse;
   if (typeof payload.access_token !== "string") {
     throw new Error("access_token missing in response");
   }
