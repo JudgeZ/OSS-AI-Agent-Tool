@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import { queueDepthGauge } from "../observability/metrics.js";
 import { getLatestPlanStepEvent, publishPlanStepEvent } from "../plan/events.js";
@@ -57,8 +58,17 @@ async function emitPlanEvent(
   await planStateStore?.setState(planId, step.id, update.state, update.summary, update.output);
   const latest = getLatestPlanStepEvent(planId, step.id);
   if (latest && latest.step.state === update.state) {
-    const summariesMatch = update.summary === undefined ? latest.step.summary === undefined : latest.step.summary === update.summary;
-    if (summariesMatch) {
+    const summariesMatch =
+      update.summary === undefined
+        ? latest.step.summary === undefined
+        : latest.step.summary === update.summary;
+    const outputsMatch =
+      update.output === undefined
+        ? latest.step.output === undefined
+        : isDeepStrictEqual(latest.step.output, update.output);
+    const occurredAtDiffers =
+      update.occurredAt !== undefined && latest.occurredAt !== update.occurredAt;
+    if (summariesMatch && outputsMatch && !occurredAtDiffers) {
       return;
     }
   }
