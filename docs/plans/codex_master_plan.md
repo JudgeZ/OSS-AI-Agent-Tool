@@ -95,6 +95,7 @@ The following capabilities, files, and workflows already exist in the repo and s
 - **E1.2 Inner Loop contracts**  
   - T1.6 Define **gRPC** proto for tool/agent exec (`src/grpc/agent.proto`), generate TS/Go stubs.  
   - T1.7 Add JSON schemas (zod) for **Plan**, **Events**, **Tool I/O** (runtime validation).  
+  - T1.9 Align initial plan events with approval gating and emit `queued` only after broker enqueue (✅).  
   - **Acceptance:** Orchestrator invokes a mock tool via gRPC with retries & timeouts.
 
 - **E1.3 Plan Tool**  
@@ -242,7 +243,7 @@ The following capabilities, files, and workflows already exist in the repo and s
 
 1. **Implement OpenAI & Anthropic providers (real SDKs)** in `services/orchestrator/src/providers/` with secrets from `SecretsStore`. Add unit tests and update docs.  
 2. **Define QueueAdapter interface** and **implement RabbitMQ adapter** with idempotent semantics (`services/orchestrator/src/queue/*`). Add metrics endpoints.  
-3. **Expand Plan Tool** to stream all step transitions to SSE and label capabilities/timeouts/approvals. Update GUI to render the timeline.  
+3. **Expand Plan Tool** to stream all step transitions to SSE and label capabilities/timeouts/approvals. Update GUI to render the timeline. (Initial state now `waiting_approval` or `queued` only after enqueue.)  
 4. **Add basic “approve action” modal** in GUI for `repo.write`/`network.egress`.  
 5. **Write ADRs** for provider auth flows (OAuth vs API key specifics) and queue selection policies.
 

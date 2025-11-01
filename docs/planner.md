@@ -55,7 +55,7 @@ Response body:
 }
 ```
 
-Each plan creation emits a `plan.step` event per step in the `queued` state (see below). Artifacts are written to `.plans/<id>/plan.json` and `.plans/<id>/plan.md` as part of the same request.
+Each plan creation emits a `plan.step` event per step: approval-gated steps start in `waiting_approval`, while executable steps emit `queued` after the broker acknowledges their enqueue. Artifacts are written to `.plans/<id>/plan.json` and `.plans/<id>/plan.md` as part of the same request.
 
 ### `POST /chat`
 
@@ -79,10 +79,12 @@ Sample event payload:
 
 ```text
 event: plan.step
-data: {"event":"plan.step","traceId":"07f1d186-4f07-4b40-9265-6a51f78fbdfa","planId":"plan-a1b2c3d4","step":{"id":"s2","action":"apply_changes","tool":"code_writer","state":"queued","capability":"repo.write","capabilityLabel":"Apply repository changes","labels":["repo","automation","approval"],"timeoutSeconds":900,"approvalRequired":true}}
+data: {"event":"plan.step","traceId":"07f1d186-4f07-4b40-9265-6a51f78fbdfa","planId":"plan-a1b2c3d4","step":{"id":"s2","action":"apply_changes","tool":"code_writer","state":"waiting_approval","capability":"repo.write","capabilityLabel":"Apply repository changes","labels":["repo","automation","approval"],"timeoutSeconds":900,"approvalRequired":true,"summary":"Awaiting approval"}}
 ```
 
 For test automation or scripting scenarios, sending `Accept: application/json` returns a JSON object with the accumulated events instead of holding the connection open.
+
+Because queue enqueueing is now atomic with event emission, callers will only see `queued` once the broker accepted the message. If the enqueue fails, a `failed` event is emitted with the broker error so operators can retry.
 
 ## Step Metadata
 

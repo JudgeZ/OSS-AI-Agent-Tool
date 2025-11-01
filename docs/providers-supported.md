@@ -1,15 +1,17 @@
 # Supported Providers (initial set)
 
-| Provider        | Chat/Completion | Embeddings | Auth Modes                 | Notes |
-|----------------|------------------|------------|----------------------------|-------|
-| OpenAI         | Yes              | Yes        | API Key                    | Enterprise via Azure OpenAI also supported |
-| Anthropic      | Yes              | -          | API Key                    | Claude 3 via direct or Bedrock |
-| Google (Gemini)| Yes              | Yes        | API Key / OAuth / Service Account | OAuth used for consumer tenants; enterprise can supply service accounts |
-| Azure OpenAI   | Yes              | Yes        | AAD / API Key              | Uses customer deployments |
-| AWS Bedrock    | Yes              | Yes        | IAM                        | Anthropic + Cohere routes |
-| Mistral        | Yes              | Yes        | API Key                    |       |
-| OpenRouter     | Yes              | Yes        | API Key / OAuth            | Consumer-friendly multi-model router |
-| Local (Ollama) | Yes              | Yes        | None                       | Use for offline/local-first |
+| Provider        | Chat | Embeddings | Auth Modes                 | Notes |
+|----------------|------|------------|----------------------------|-------|
+| OpenAI         | ✅    | 🔶 Planned | API Key                    | Real completions via official SDK. Embeddings arrive alongside Phase 4 tooling. |
+| Anthropic      | ✅    | 🔶 Planned | API Key                    | Claude 3 via Messages API. |
+| Google (Gemini)| ✅    | 🔶 Planned | API Key / OAuth / Service Account | OAuth used for consumer tenants; enterprise can supply service accounts. |
+| Azure OpenAI   | ✅    | 🔶 Planned | AAD / API Key              | Uses bring-your-own deployment. |
+| AWS Bedrock    | ✅    | 🔶 Planned | IAM                        | Calls Bedrock runtime for Anthropic + Cohere routes. |
+| Mistral        | ✅    | 🔶 Planned | API Key                    | Chat-first today; embedding support coming with provider SDK update. |
+| OpenRouter     | ✅    | 🔶 Planned | API Key / OAuth            | Consumer-friendly multi-model router. Picks OAuth tokens when present. |
+| Local (Ollama) | ✅    | 🔶 Planned | None                       | Local HTTP endpoint (`http://127.0.0.1:11434` by default). |
+
+Legend: ✅ Available today · 🔶 Planned
 
 All adapters resolve credentials through the shared `SecretsStore` abstraction and raise structured `ProviderError` instances
 with retry hints so the orchestrator can fail over gracefully.
@@ -23,7 +25,7 @@ with retry hints so the orchestrator can fail over gracefully.
 | Google Gemini | `provider:google:apiKey`, optional `provider:google:serviceAccount`, optional `provider:google:oauthClientId`, optional `provider:google:oauthClientSecret` | `GOOGLE_API_KEY`, `GOOGLE_SERVICE_ACCOUNT`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Provider prefers OAuth tokens (`oauth:google:*`) when present, then service accounts, then API key. |
 | Azure OpenAI | `provider:azureopenai:apiKey`, `provider:azureopenai:endpoint`, `provider:azureopenai:deployment` | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` | Deployment name may also be supplied in the chat request. |
 | AWS Bedrock | `provider:bedrock:accessKeyId`, `provider:bedrock:secretAccessKey`, optional `provider:bedrock:sessionToken`, optional `provider:bedrock:region` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | Region defaults to `us-east-1` when not provided. |
-| Mistral | `provider:mistral:apiKey` | `MISTRAL_API_KEY` | Supports chat + embeddings. |
+| Mistral | `provider:mistral:apiKey` | `MISTRAL_API_KEY` | Chat support today; embeddings coming with SDK v2. |
 | OpenRouter | `provider:openrouter:apiKey` | `OPENROUTER_API_KEY` | Falls back to OAuth access token when available. |
 | Local Ollama | `provider:ollama:baseUrl` | `OLLAMA_BASE_URL` | Defaults to `http://127.0.0.1:11434`. |
 

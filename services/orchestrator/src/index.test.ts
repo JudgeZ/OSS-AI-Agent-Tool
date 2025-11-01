@@ -154,6 +154,24 @@ describe("orchestrator http api", () => {
         throw new Error("expected an approval-requiring step");
       }
 
+    publishPlanStepEvent({
+      event: "plan.step",
+      traceId: "trace-conflict",
+      planId,
+      step: {
+        id: approvalStep.id,
+        action: approvalStep.action,
+        tool: approvalStep.tool,
+        state: "queued",
+        capability: approvalStep.capability,
+        capabilityLabel: approvalStep.capabilityLabel,
+        labels: approvalStep.labels,
+        timeoutSeconds: approvalStep.timeoutSeconds,
+        approvalRequired: true,
+        summary: "Ready to execute"
+      }
+    });
+
       await request(app)
         .post(`/plan/${planId}/steps/${approvalStep.id}/approve`)
         .send({ decision: "approve" })
