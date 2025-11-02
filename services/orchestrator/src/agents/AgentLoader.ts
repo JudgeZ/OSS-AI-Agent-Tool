@@ -13,8 +13,8 @@ export type AgentProfile = {
 };
 
 export function loadAgentProfile(name: string): AgentProfile {
-  const p = path.join(process.cwd(), "agents", name, "agent.md");
-  const raw = fs.readFileSync(p, "utf-8");
+  const resolvedPath = resolveAgentPath(name);
+  const raw = fs.readFileSync(resolvedPath, "utf-8");
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/m.exec(raw);
   let meta: Record<string, unknown> = {};
   let body = raw;
@@ -82,4 +82,20 @@ function normalizeModel(value: unknown): AgentProfile["model"] {
     return model;
   }
   return {};
+}
+
+function resolveAgentPath(name: string): string {
+  const candidates = [
+    path.join(process.cwd(), "agents", name, "agent.md"),
+    path.resolve(process.cwd(), "..", "agents", name, "agent.md"),
+    path.resolve(__dirname, "../../../../agents", name, "agent.md")
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(`Agent profile not found for ${name}`);
 }
