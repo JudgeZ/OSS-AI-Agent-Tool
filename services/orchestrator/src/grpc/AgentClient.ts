@@ -168,7 +168,7 @@ export class ToolAgentClient {
     throw lastError ?? new ToolClientError("Tool execution failed");
   }
 
-  private invoke(request: ExecuteToolRequest, metadata: Metadata, timeoutMs: number): Promise<{ events: any[] }> {
+  private invoke(request: ExecuteToolRequest, metadata: Metadata, timeoutMs: number): Promise<{ events: unknown[] }> {
     const client = this.getClient();
     const deadline = Date.now() + timeoutMs;
     return new Promise((resolve, reject) => {
